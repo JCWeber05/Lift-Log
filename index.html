@@ -1,0 +1,417 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#2B4BD8">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Lift log">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<title>Lift log</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#ECEEF1;--surface:#FFFFFF;--ink:#151A22;--muted:#5F6B7A;--line:#D3D8DF;
+  --accent:#2B4BD8;--on-accent:#FFFFFF;--danger:#B3261E;
+  box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#12161C;--surface:#1B212A;--ink:#EEF1F5;--muted:#9AA6B6;--line:#2C3541;
+    --accent:#8AA2FF;--on-accent:#0E1320;--danger:#FF8A80;color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#12161C;--surface:#1B212A;--ink:#EEF1F5;--muted:#9AA6B6;--line:#2C3541;
+  --accent:#8AA2FF;--on-accent:#0E1320;--danger:#FF8A80;color-scheme:dark;
+}
+html{scroll-padding-top:env(safe-area-inset-top,0px);-webkit-text-size-adjust:100%}
+*,*::before,*::after{box-sizing:inherit}
+body{margin:0;background:var(--bg);color:var(--ink);font:500 17px/1.45 "Barlow",system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-tap-highlight-color:transparent}
+main{max-width:560px;margin:0 auto;padding:12px 14px 56px}
+button,input{font:inherit;color:inherit}
+button{cursor:pointer;touch-action:manipulation}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+h2,h3{margin:0}
+.head{font:700 24px/1.1 "Barlow Condensed","Arial Narrow",sans-serif}
+
+.timer{padding:4px 0 16px;border-bottom:2px solid var(--ink)}
+.clock{font:700 clamp(64px,22vw,104px)/0.95 "Barlow Condensed","Arial Narrow",sans-serif;font-variant-numeric:tabular-nums;margin:0}
+.clock.idle{color:var(--muted)}
+.tctl{display:flex;gap:10px;margin-top:10px}
+.btn{border:2px solid var(--ink);background:transparent;border-radius:8px;padding:10px 16px;font-weight:600;min-height:52px}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.btn:disabled{opacity:.4}
+.grow{flex:1}
+
+.summary{background:var(--surface);border:1px solid var(--line);border-left:6px solid var(--accent);border-radius:8px;padding:16px;margin:16px 0}
+.bigvol{font:700 60px/1 "Barlow Condensed","Arial Narrow",sans-serif;font-variant-numeric:tabular-nums;margin:6px 0 2px}
+.sub{color:var(--muted);font-size:15px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0}
+.stat b{display:block;font:700 28px/1 "Barlow Condensed","Arial Narrow",sans-serif;font-variant-numeric:tabular-nums}
+.stat span{font-size:14px;color:var(--muted)}
+
+.tabs{display:flex;gap:28px;margin:16px 0 2px}
+.tab{background:none;border:0;border-bottom:3px solid transparent;padding:8px 0;font:600 22px "Barlow Condensed","Arial Narrow",sans-serif;color:var(--muted);min-height:44px}
+.tab[aria-selected="true"]{color:var(--ink);border-color:var(--accent)}
+
+form{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px;margin:10px 0 18px}
+label{display:block;font-size:14px;color:var(--muted);margin-bottom:4px}
+input[type=text],input[type=number]{width:100%;min-height:52px;padding:8px 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg);font-size:20px;font-weight:600}
+input[type=number]{text-align:center;-moz-appearance:textfield}
+input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.addrow{display:flex;gap:10px}
+.addrow input{flex:1;min-width:0}
+.unitrow{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:12px}
+.unit{display:flex;border:2px solid var(--ink);border-radius:8px;overflow:hidden}
+.unit button{border:0;background:transparent;padding:0 16px;font-weight:600;min-height:52px}
+.unit button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+
+ul{list-style:none;margin:0;padding:0}
+.grp{margin:18px 0 0}
+.grp h3{font:700 22px/1.2 "Barlow Condensed","Arial Narrow",sans-serif;overflow-wrap:anywhere}
+.cols,.srow{display:grid;grid-template-columns:40px 1fr 1fr 44px;gap:8px;align-items:center}
+.cols{margin:8px 0 4px}
+.cols span{font-size:14px;color:var(--muted)}
+.cols span:nth-child(2),.cols span:nth-child(3){text-align:center}
+.srow{margin-bottom:8px}
+.srow .n{font:700 24px "Barlow Condensed","Arial Narrow",sans-serif;text-align:center;color:var(--muted)}
+.wcell{position:relative}
+.wcell input{padding-right:34px}
+.wcell .u{position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:14px;color:var(--muted);pointer-events:none}
+.plus{width:100%;min-height:52px;border:2px dashed var(--line);background:transparent;border-radius:8px;font-size:30px;line-height:1;color:var(--muted);margin-top:2px}
+.plus:active{border-color:var(--accent);color:var(--accent)}
+.del{border:0;background:transparent;color:var(--muted);font-size:26px;line-height:1;width:48px;height:48px;border-radius:8px}
+.del:active{color:var(--danger)}
+.empty{color:var(--muted);padding:20px 0}
+.vol{font:600 20px "Barlow Condensed","Arial Narrow",sans-serif;font-variant-numeric:tabular-nums;white-space:nowrap}
+.line{display:flex;justify-content:space-between;gap:10px;padding:6px 0}
+
+details{border-bottom:1px solid var(--line)}
+summary{display:flex;align-items:center;gap:10px;padding:14px 0;cursor:pointer;list-style:none;min-height:56px}
+summary::-webkit-details-marker{display:none}
+summary .main{flex:1}
+summary strong{display:block;font-weight:600}
+summary small{color:var(--muted);font-size:14px}
+summary::after{content:"+";font-size:24px;color:var(--muted);width:22px;text-align:center}
+details[open] summary::after{content:"−"}
+.ex{padding:0 0 14px}
+.ex .hd{display:flex;justify-content:space-between;font-weight:600;margin-top:10px}
+.ex .s{display:flex;gap:12px;color:var(--muted);font-size:15px;padding:2px 0}
+.ex .s b{color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}
+.exp{margin:16px 0}
+.sync{margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
+.syncbar{display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-top:8px}
+.syncbar a{color:var(--accent);font-weight:600;min-height:44px;display:inline-flex;align-items:center}
+[hidden]{display:none!important}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<main>
+  <section class="timer" aria-label="Workout timer">
+    <p class="clock idle" id="clock" role="timer" aria-live="off">00:00</p>
+    <div class="tctl">
+      <button class="btn primary grow" id="tgl" type="button">Start workout</button>
+      <button class="btn grow" id="end" type="button">End workout</button>
+    </div>
+  </section>
+
+  <section class="summary" id="summary" hidden>
+    <h2 class="head">Workout done</h2>
+    <p class="bigvol" id="sv"></p>
+    <p class="sub">Total volume lifted</p>
+    <div class="stats" id="sstats"></div>
+    <div id="sex"></div>
+    <div class="sync" id="sync" aria-live="polite">
+      <p class="sub" id="syncmsg"></p>
+      <div class="syncbar"><button class="btn" id="retry" type="button" hidden>Retry save</button><a id="sheetlink" target="_blank" rel="noopener" hidden>Open Lift log sheet</a></div>
+    </div>
+    <button class="btn grow" id="neww" type="button" style="width:100%;margin-top:12px">Start new workout</button>
+  </section>
+
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" id="t-today" aria-selected="true" type="button">Today</button>
+    <button class="tab" role="tab" id="t-hist" aria-selected="false" type="button">History</button>
+  </div>
+
+  <section id="v-today">
+    <form id="f" autocomplete="off">
+      <label for="name">New exercise</label>
+      <div class="addrow">
+        <input type="text" id="name" list="names" placeholder="Bench press" required maxlength="60" enterkeyhint="done">
+        <button class="btn primary" type="submit">Add</button>
+      </div>
+      <datalist id="names"></datalist>
+      <div class="unitrow">
+        <span class="sub">Weight unit for new exercises</span>
+        <div class="unit" role="group" aria-label="Weight unit">
+          <button type="button" id="u-lb" aria-pressed="true">lb</button>
+          <button type="button" id="u-kg" aria-pressed="false">kg</button>
+        </div>
+      </div>
+    </form>
+    <h2 class="head" id="thead">Today’s sets</h2>
+    <div id="today"></div>
+  </section>
+
+  <section id="v-hist" hidden>
+    <details class="cfg" id="cfg">
+      <summary><div class="main"><strong>Google Sheets sync</strong><small id="cfgstat"></small></div></summary>
+      <div class="ex">
+        <label for="cfgurl">Web app URL</label>
+        <input type="text" id="cfgurl" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="https://script.google.com/macros/s/…/exec">
+        <label for="cfgtok" style="margin-top:12px">Secret token</label>
+        <input type="text" id="cfgtok" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="The token you put in the script">
+        <div class="syncbar"><button class="btn primary" id="cfgsave" type="button">Save and test</button></div>
+        <p class="sub" id="cfgmsg" aria-live="polite"></p>
+      </div>
+    </details>
+    <div class="exp"><button class="btn" id="exp" type="button">Export spreadsheet (CSV)</button><p class="sub" id="expmsg"></p></div>
+    <div id="hist"></div>
+  </section>
+</main>
+
+<script>
+const KEY="liftlog:v1",TKEY="liftlog:timer",UKEY="liftlog:unit",EKEY="liftlog:ended";
+function load(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}}
+function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+let raw=load(KEY,[]);if(!Array.isArray(raw))raw=[];
+// each entry is one set; older entries logged as "N sets" are split into single sets
+let entries=raw.flatMap(e=>{
+  const n=e.sets>1?e.sets:1;
+  return Array.from({length:n},(_,i)=>({id:n>1?e.id+"-"+i:e.id,date:e.date,name:e.name,reps:e.reps,weight:e.weight,unit:e.unit||"lb",ts:(e.ts||0)+i}));
+});
+save(KEY,entries);
+let unit=load(UKEY,"lb"),timer=load(TKEY,{acc:0,start:null}),ended=load(EKEY,null);
+if(unit!=="lb"&&unit!=="kg")unit="lb";
+const $=id=>document.getElementById(id);
+const pad=n=>String(n).padStart(2,"0");
+const todayKey=()=>{const d=new Date();return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate())};
+const isEnded=()=>!!ended&&ended.date===todayKey();
+const fmt=n=>Math.round(n).toLocaleString();
+const wfmt=n=>String(+Number(n).toFixed(1));
+const conv=(e,u)=>e.unit===u?e.weight:(u==="kg"?e.weight*0.45359237:e.weight/0.45359237);
+const vol=(e,u)=>e.reps*conv(e,u);
+const sum=(l,u)=>l.reduce((a,e)=>a+vol(e,u),0);
+function el(tag,cls,text){const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=text;return n}
+function groups(list){const g={};list.forEach(e=>{const k=e.name.toLowerCase();(g[k]=g[k]||{name:e.name,items:[]}).items.push(e)});return Object.values(g)}
+const setTxt=e=>(e.reps||0)+" × "+wfmt(e.weight||0)+" "+e.unit;
+
+/* Timer */
+const dur=ms=>{const s=Math.floor(ms/1000),h=Math.floor(s/3600),m=Math.floor(s%3600/60);return (h?h+":"+pad(m):pad(m))+":"+pad(s%60)};
+const elapsed=()=>timer.acc+(timer.start?Date.now()-timer.start:0);
+function drawTimer(){
+  $("clock").textContent=dur(elapsed());
+  $("clock").classList.toggle("idle",!timer.start);
+  $("tgl").textContent=timer.start?"Pause":(timer.acc?"Resume":"Start workout");
+  $("end").disabled=isEnded();
+}
+$("tgl").onclick=()=>{
+  if(timer.start){timer.acc+=Date.now()-timer.start;timer.start=null}
+  else{timer.start=Date.now();ended=null;save(EKEY,null)}
+  save(TKEY,timer);drawTimer();render();
+};
+$("end").onclick=()=>{
+  if(timer.start){timer.acc+=Date.now()-timer.start;timer.start=null}
+  ended={date:todayKey(),ms:timer.acc};
+  save(TKEY,timer);save(EKEY,ended);drawTimer();render();window.scrollTo(0,0);
+  syncSheet();
+};
+$("neww").onclick=()=>{timer={acc:0,start:null};ended=null;save(TKEY,timer);save(EKEY,null);drawTimer();render()};
+setInterval(drawTimer,250);
+
+/* Unit + tabs */
+function drawUnit(){$("u-lb").setAttribute("aria-pressed",unit==="lb");$("u-kg").setAttribute("aria-pressed",unit==="kg")}
+function setUnit(u){unit=u;save(UKEY,u);drawUnit();render()}
+$("u-lb").onclick=()=>setUnit("lb");
+$("u-kg").onclick=()=>setUnit("kg");
+function showTab(t){
+  const h=t==="hist";
+  $("v-today").hidden=h;$("v-hist").hidden=!h;
+  $("t-today").setAttribute("aria-selected",!h);$("t-hist").setAttribute("aria-selected",h);
+}
+$("t-today").onclick=()=>showTab("today");
+$("t-hist").onclick=()=>showTab("hist");
+
+/* Form */
+function addSet(name,src){
+  const last=src||entries.filter(e=>e.name.toLowerCase()===name.toLowerCase()).sort((a,b)=>b.ts-a.ts)[0];
+  entries.push({id:Date.now()+Math.random().toString(36).slice(2,6),date:todayKey(),name,
+    reps:last?last.reps:null,weight:last?last.weight:null,unit:last?last.unit:unit,ts:Date.now()});
+  if(isEnded()){ended=null;save(EKEY,null)}
+  save(KEY,entries);render();
+}
+$("f").addEventListener("submit",ev=>{
+  ev.preventDefault();
+  const n=$("name").value.trim();if(!n)return;
+  addSet(n);$("name").value="";
+});
+function remove(id){entries=entries.filter(e=>e.id!==id);save(KEY,entries);render()}
+function numInput(e,field,mode,label){
+  const i=document.createElement("input");
+  i.type="number";i.inputMode=mode;i.min="0";i.step=field==="reps"?"1":"any";
+  i.value=e[field]==null?"":e[field];i.placeholder="0";i.setAttribute("aria-label",label);
+  i.oninput=()=>{const v=parseFloat(i.value);e[field]=isNaN(v)?null:(field==="reps"?Math.round(v):v);save(KEY,entries)};
+  return i;
+}
+
+/* Render */
+function render(){
+  const dl=$("names");dl.textContent="";
+  [...new Set(entries.map(e=>e.name))].sort().forEach(n=>{const o=document.createElement("option");o.value=n;dl.appendChild(o)});
+
+  const td=entries.filter(e=>e.date===todayKey()).sort((a,b)=>a.ts-b.ts);
+  const gs=groups(td);
+
+  // summary (only once the workout is ended)
+  const sm=$("summary");sm.hidden=!isEnded();
+  if(isEnded()){
+    $("sv").textContent=fmt(sum(td,unit))+" "+unit;
+    const st=$("sstats");st.textContent="";
+    [[dur(ended.ms),"Time"],[td.length,"Sets"],[gs.length,"Exercises"]].forEach(([v,l])=>{
+      const d=el("div","stat");d.appendChild(el("b","",v));d.appendChild(el("span","",l));st.appendChild(d);
+    });
+    const sx=$("sex");sx.textContent="";
+    gs.forEach(g=>{const r=el("div","line");r.appendChild(el("span","",g.name+" ("+g.items.length+(g.items.length===1?" set)":" sets)")));r.appendChild(el("span","vol",fmt(sum(g.items,unit))+" "+unit));sx.appendChild(r)});
+  }
+
+  drawSync();
+  // today: one block per exercise, one row per set (Set / Reps / Weight)
+  $("thead").textContent="Today’s sets"+(td.length?" ("+td.length+")":"");
+  const box=$("today");box.textContent="";
+  if(!td.length)box.appendChild(el("p","empty","No exercises yet. Add one above."));
+  gs.forEach(g=>{
+    const w=el("div","grp");w.appendChild(el("h3","",g.name));
+    const hd=el("div","cols");["Set","Reps","Weight",""].forEach(t=>hd.appendChild(el("span","",t)));w.appendChild(hd);
+    g.items.forEach((e,i)=>{
+      const r=el("div","srow");r.appendChild(el("span","n",String(i+1)));
+      r.appendChild(numInput(e,"reps","numeric","Reps, set "+(i+1)));
+      const wc=el("div","wcell");wc.appendChild(numInput(e,"weight","decimal","Weight, set "+(i+1)));wc.appendChild(el("span","u",e.unit));r.appendChild(wc);
+      const b=el("button","del","×");b.type="button";b.setAttribute("aria-label","Delete "+g.name+" set "+(i+1));b.onclick=()=>remove(e.id);
+      r.appendChild(b);w.appendChild(r);
+    });
+    const p=el("button","plus","+");p.type="button";p.setAttribute("aria-label","Add set to "+g.name);
+    p.onclick=()=>addSet(g.name,g.items[g.items.length-1]);
+    w.appendChild(p);box.appendChild(w);
+  });
+
+  // history
+  const h=$("hist");h.textContent="";
+  const days={};entries.forEach(e=>(days[e.date]=days[e.date]||[]).push(e));
+  const keys=Object.keys(days).sort().reverse();
+  if(!keys.length){h.appendChild(el("p","empty","No history yet. Days you log show up here."));return}
+  keys.forEach(k=>{
+    const list=days[k].sort((a,b)=>a.ts-b.ts),[y,mo,d]=k.split("-").map(Number);
+    const showVol=k!==todayKey()||isEnded();
+    const label=new Date(y,mo-1,d).toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric",year:"numeric"});
+    const g2=groups(list);
+    const det=document.createElement("details"),sm2=document.createElement("summary"),m=el("div","main");
+    m.appendChild(el("strong","",label));
+    m.appendChild(el("small","",g2.length+(g2.length===1?" exercise, ":" exercises, ")+list.length+(list.length===1?" set":" sets")));
+    sm2.appendChild(m);
+    if(showVol)sm2.appendChild(el("span","vol",fmt(sum(list,unit))+" "+unit));
+    det.appendChild(sm2);
+    const ex=el("div","ex");
+    g2.forEach(g=>{
+      const hd=el("div","hd");hd.appendChild(el("span","",g.name));
+      if(showVol)hd.appendChild(el("span","vol",fmt(sum(g.items,unit))+" "+unit));
+      ex.appendChild(hd);
+      g.items.forEach((e,i)=>{const s=el("div","s");s.appendChild(el("span","","Set "+(i+1)));s.appendChild(el("b","",setTxt(e)));ex.appendChild(s)});
+    });
+    det.appendChild(ex);h.appendChild(det);
+  });
+}
+
+/* Google Sheets sync: posts new sets to your Apps Script web app when a workout ends */
+const SKEY="liftlog:synced",CKEY="liftlog:cfg";
+let synced=new Set(load(SKEY,[])),cfg=load(CKEY,{url:"",token:"",sheetUrl:""}),syncing=false,syncMsg="",syncRetry=false;
+if(!cfg||typeof cfg!=="object")cfg={url:"",token:"",sheetUrl:""};
+function drawSync(){
+  $("syncmsg").textContent=syncMsg;
+  $("retry").hidden=!syncRetry||syncing;
+  const a=$("sheetlink");a.hidden=!(cfg.sheetUrl&&isEnded());if(cfg.sheetUrl)a.href=cfg.sheetUrl;
+}
+function drawCfg(){
+  $("cfgstat").textContent=cfg.url&&cfg.token?"Connected to your sheet":"Not set up yet";
+  $("cfgurl").value=cfg.url||"";$("cfgtok").value=cfg.token||"";
+}
+async function post(rows){
+  const res=await fetch(cfg.url,{method:"POST",redirect:"follow",body:JSON.stringify({token:cfg.token,rows})});
+  let j;try{j=await res.json()}catch(e){throw {code:"bad_response"}}
+  if(!j||!j.ok)throw {code:j&&j.error==="bad_token"?"bad_token":"script_error",msg:j&&j.error};
+  if(j.sheetUrl&&j.sheetUrl!==cfg.sheetUrl){cfg.sheetUrl=j.sheetUrl;save(CKEY,cfg)}
+  return j;
+}
+function describe(err){
+  const c=err&&err.code;
+  if(c==="bad_token")return "The secret token doesn’t match the script. Check it in History → Google Sheets sync.";
+  if(c==="bad_response")return "The web app URL didn’t answer like your script. Check the URL and that access is set to Anyone.";
+  if(c==="script_error")return "The script reported an error"+(err.msg?": "+err.msg:".");
+  return "Couldn’t reach Google Sheets. Check your connection, then tap Retry.";
+}
+async function syncSheet(){
+  if(syncing)return;
+  syncRetry=false;
+  if(!cfg.url||!cfg.token){syncMsg="Sheet sync isn’t set up. Add your script URL in History → Google Sheets sync.";drawSync();return}
+  const all=entries.slice().sort((a,b)=>a.date===b.date?a.ts-b.ts:(a.date<b.date?-1:1));
+  const no={},cnt={};
+  all.forEach(e=>{const k=e.date+"|"+e.name.toLowerCase();cnt[k]=(cnt[k]||0)+1;no[e.id]=cnt[k]});
+  const todo=all.filter(e=>!synced.has(e.id)&&e.reps>0);
+  if(!todo.length){syncMsg=entries.length?"Everything is already saved to your sheet.":"";drawSync();return}
+  const mins=ended?Math.round(ended.ms/60000):"";
+  const rows=todo.map(e=>[e.date,e.name,no[e.id],e.reps,e.weight==null?"":e.weight,e.unit,+(e.reps*(e.weight||0)).toFixed(2),e.date===todayKey()?mins:"",e.id]);
+  syncing=true;syncMsg="Saving "+todo.length+(todo.length===1?" set":" sets")+" to Google Sheets…";drawSync();
+  try{
+    await post(rows);
+    todo.forEach(e=>synced.add(e.id));save(SKEY,[...synced]);
+    syncMsg="Saved "+todo.length+(todo.length===1?" set":" sets")+" to your Lift log sheet.";
+  }catch(err){syncRetry=true;syncMsg=describe(err)+" Retrying is safe: sets already in the sheet are skipped."}
+  syncing=false;drawSync();
+}
+$("retry").onclick=()=>syncSheet();
+$("cfgsave").onclick=async()=>{
+  cfg.url=$("cfgurl").value.trim();cfg.token=$("cfgtok").value.trim();
+  if(!/^https:\/\/script\.google\.com\/.+\/exec/.test(cfg.url)){$("cfgmsg").textContent="That doesn’t look like a web app URL. It should start with https://script.google.com and end with /exec.";return}
+  if(!cfg.token){$("cfgmsg").textContent="Enter the secret token from your script.";return}
+  $("cfgmsg").textContent="Testing…";
+  try{await post([]);save(CKEY,cfg);$("cfgmsg").textContent="Connected. Sets will save when you tap End workout.";drawCfg();drawSync()}
+  catch(err){$("cfgmsg").textContent=describe(err)}
+};
+
+/* Spreadsheet export (CSV opens in Google Sheets, Excel, Numbers) */
+function csv(){
+  const q=v=>{v=String(v);return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v};
+  const rows=[["Date","Exercise","Set","Reps","Weight","Unit","Volume"]],cnt={};
+  entries.slice().sort((a,b)=>a.date===b.date?a.ts-b.ts:(a.date<b.date?-1:1)).forEach(e=>{
+    const k=e.date+"|"+e.name.toLowerCase();cnt[k]=(cnt[k]||0)+1;
+    rows.push([e.date,e.name,cnt[k],e.reps??"",e.weight??"",e.unit,+((e.reps||0)*(e.weight||0)).toFixed(2)]);
+  });
+  return rows.map(r=>r.map(q).join(",")).join("\n");
+}
+$("exp").onclick=async()=>{
+  if(!entries.length){$("expmsg").textContent="Log a set first, then export.";return}
+  const name="lift-log-"+todayKey()+".csv",file=new File([csv()],name,{type:"text/csv"});
+  try{
+    if(navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],title:"Lift log"});$("expmsg").textContent="Shared.";return}
+    const a=document.createElement("a");a.href=URL.createObjectURL(file);a.download=name;document.body.appendChild(a);a.click();a.remove();
+    $("expmsg").textContent="Saved to your downloads.";
+  }catch(e){if(e&&e.name!=="AbortError")$("expmsg").textContent="Export didn’t work here."}
+};
+
+/* Offline support */
+if("serviceWorker" in navigator&&location.protocol.startsWith("http")){
+  window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));
+}
+
+drawUnit();drawTimer();drawCfg();render();
+</script>
+</body>
+</html>
