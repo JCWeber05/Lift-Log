@@ -107,6 +107,8 @@ details[open] summary::after{content:"−"}
 .ex .s{display:flex;gap:12px;color:var(--muted);font-size:15px;padding:2px 0}
 .ex .s b{color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}
 .exp{margin:16px 0}
+.btn.danger{border-color:var(--danger);color:var(--danger);margin-top:12px;width:100%}
+.clearall{margin:24px 0 8px}
 .sync{margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
 .syncbar{display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-top:8px}
 .syncbar a{color:var(--accent);font-weight:600;min-height:44px;display:inline-flex;align-items:center}
@@ -175,6 +177,7 @@ details[open] summary::after{content:"−"}
       </div>
     </details>
     <div class="exp"><button class="btn" id="exp" type="button">Export spreadsheet (CSV)</button><p class="sub" id="expmsg"></p></div>
+    <p class="sub" id="histmsg" aria-live="polite"></p>
     <div id="hist"></div>
   </section>
 </main>
@@ -326,8 +329,34 @@ function render(){
       ex.appendChild(hd);
       g.items.forEach((e,i)=>{const s=el("div","s");s.appendChild(el("span","","Set "+(i+1)));s.appendChild(el("b","",setTxt(e)));ex.appendChild(s)});
     });
+    const nSets=list.length,unsynced=list.filter(e=>!synced.has(e.id)&&e.reps>0).length;
+    ex.appendChild(confirmBtn("Delete this day","Tap again to delete "+nSets+(nSets===1?" set":" sets")+(unsynced?" ("+unsynced+" not in your sheet yet)":""),()=>deleteEntries(e=>e.date===k,label)));
     det.appendChild(ex);h.appendChild(det);
   });
+  const total=entries.length,unsyncedAll=entries.filter(e=>!synced.has(e.id)&&e.reps>0).length;
+  const ca=el("div","clearall");
+  ca.appendChild(confirmBtn("Delete all history on this device","Tap again to delete all "+total+" sets"+(unsyncedAll?" ("+unsyncedAll+" not in your sheet yet)":""),()=>deleteEntries(()=>true,"all history")));
+  h.appendChild(ca);
+}
+
+/* Delete history (this device only; the Google Sheet is not touched) */
+function confirmBtn(label,armedLabel,onConfirm){
+  const b=el("button","btn danger",label);b.type="button";let t=null;
+  b.onclick=()=>{
+    if(t){clearTimeout(t);t=null;onConfirm();return}
+    b.textContent=armedLabel;t=setTimeout(()=>{t=null;b.textContent=label},4000);
+  };
+  return b;
+}
+function deleteEntries(match,what){
+  const before=entries.length;
+  const todayGone=entries.some(e=>e.date===todayKey()&&match(e));
+  entries=entries.filter(e=>!match(e));
+  save(KEY,entries);
+  if(todayGone&&!entries.some(e=>e.date===todayKey())){ended=null;save(EKEY,null)}
+  const n=before-entries.length;
+  $("histmsg").textContent="Deleted "+n+(n===1?" set":" sets")+" ("+what+") from this device. Your Google Sheet wasn’t changed.";
+  drawTimer();render();
 }
 
 /* Google Sheets sync: posts new sets to your Apps Script web app when a workout ends */
