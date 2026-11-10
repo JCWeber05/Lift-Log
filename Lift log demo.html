@@ -1,0 +1,451 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Lift log demo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#ECEEF1;--surface:#FFFFFF;--ink:#151A22;--muted:#5F6B7A;--line:#D3D8DF;
+  --accent:#2B4BD8;--on-accent:#FFFFFF;--danger:#B3261E;
+  box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#12161C;--surface:#1B212A;--ink:#EEF1F5;--muted:#9AA6B6;--line:#2C3541;
+    --accent:#8AA2FF;--on-accent:#0E1320;--danger:#FF8A80;color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#12161C;--surface:#1B212A;--ink:#EEF1F5;--muted:#9AA6B6;--line:#2C3541;
+  --accent:#8AA2FF;--on-accent:#0E1320;--danger:#FF8A80;color-scheme:dark;
+}
+html{scroll-padding-top:env(safe-area-inset-top,0px);-webkit-text-size-adjust:100%}
+*,*::before,*::after{box-sizing:inherit}
+body{margin:0;background:var(--bg);color:var(--ink);font:500 17px/1.45 "Barlow",system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-tap-highlight-color:transparent}
+main{max-width:560px;margin:0 auto;padding:12px 14px 56px}
+button,input{font:inherit;color:inherit}
+button{cursor:pointer;touch-action:manipulation}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+h2,h3{margin:0}
+.head{font:700 24px/1.1 "Barlow Condensed","Arial Narrow",sans-serif}
+
+.timer{padding:4px 0 16px;border-bottom:2px solid var(--ink)}
+.clock{font:700 clamp(64px,22vw,104px)/0.95 "Barlow Condensed","Arial Narrow",sans-serif;font-variant-numeric:tabular-nums;margin:0}
+.clock.idle{color:var(--muted)}
+.tctl{display:flex;gap:10px;margin-top:10px}
+.btn{border:2px solid var(--ink);background:transparent;border-radius:8px;padding:10px 16px;font-weight:600;min-height:52px}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.btn:disabled{opacity:.4}
+.grow{flex:1}
+
+.summary{background:var(--surface);border:1px solid var(--line);border-left:6px solid var(--accent);border-radius:8px;padding:16px;margin:16px 0}
+.bigvol{font:700 60px/1 "Barlow Condensed","Arial Narrow",sans-serif;font-variant-numeric:tabular-nums;margin:6px 0 2px}
+.sub{color:var(--muted);font-size:15px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0}
+.stat b{display:block;font:700 28px/1 "Barlow Condensed","Arial Narrow",sans-serif;font-variant-numeric:tabular-nums}
+.stat span{font-size:14px;color:var(--muted)}
+
+.tabs{display:flex;gap:28px;margin:16px 0 2px}
+.tab{background:none;border:0;border-bottom:3px solid transparent;padding:8px 0;font:600 22px "Barlow Condensed","Arial Narrow",sans-serif;color:var(--muted);min-height:44px}
+.tab[aria-selected="true"]{color:var(--ink);border-color:var(--accent)}
+
+form{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px;margin:10px 0 18px}
+label{display:block;font-size:14px;color:var(--muted);margin-bottom:4px}
+input[type=text],input[type=number]{width:100%;min-height:52px;padding:8px 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg);font-size:20px;font-weight:600}
+input[type=number]{text-align:center;-moz-appearance:textfield}
+input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.addrow{display:flex;gap:10px}
+.addrow input{flex:1;min-width:0}
+.unitrow{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:12px}
+.unit{display:flex;border:2px solid var(--ink);border-radius:8px;overflow:hidden}
+.unit button{border:0;background:transparent;padding:0 16px;font-weight:600;min-height:52px}
+.unit button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+
+ul{list-style:none;margin:0;padding:0}
+.grp{margin:18px 0 0}
+.grp h3{font:700 22px/1.2 "Barlow Condensed","Arial Narrow",sans-serif;overflow-wrap:anywhere}
+.cols,.srow{display:grid;grid-template-columns:40px 1fr 1fr 44px;gap:8px;align-items:center}
+.cols{margin:8px 0 4px}
+.cols span{font-size:14px;color:var(--muted)}
+.cols span:nth-child(2),.cols span:nth-child(3){text-align:center}
+.srow{margin-bottom:8px}
+.srow .n{font:700 24px "Barlow Condensed","Arial Narrow",sans-serif;text-align:center;color:var(--muted)}
+.wcell{position:relative}
+.wcell input{padding-right:34px}
+.wcell .u{position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:14px;color:var(--muted);pointer-events:none}
+.plus{width:100%;min-height:52px;border:2px dashed var(--line);background:transparent;border-radius:8px;font-size:30px;line-height:1;color:var(--muted);margin-top:2px}
+.plus:active{border-color:var(--accent);color:var(--accent)}
+.del{border:0;background:transparent;color:var(--muted);font-size:26px;line-height:1;width:48px;height:48px;border-radius:8px}
+.del:active{color:var(--danger)}
+.empty{color:var(--muted);padding:20px 0}
+.vol{font:600 20px "Barlow Condensed","Arial Narrow",sans-serif;font-variant-numeric:tabular-nums;white-space:nowrap}
+.line{display:flex;justify-content:space-between;gap:10px;padding:6px 0}
+
+details{border-bottom:1px solid var(--line)}
+summary{display:flex;align-items:center;gap:10px;padding:14px 0;cursor:pointer;list-style:none;min-height:56px}
+summary::-webkit-details-marker{display:none}
+summary .main{flex:1}
+summary strong{display:block;font-weight:600}
+summary small{color:var(--muted);font-size:14px}
+summary::after{content:"+";font-size:24px;color:var(--muted);width:22px;text-align:center}
+details[open] summary::after{content:"−"}
+.ex{padding:0 0 14px}
+.ex .hd{display:flex;justify-content:space-between;font-weight:600;margin-top:10px}
+.ex .s{display:flex;gap:12px;color:var(--muted);font-size:15px;padding:2px 0}
+.ex .s b{color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}
+.exp{margin:16px 0}
+.sheetwrap{overflow:auto;max-height:68vh;border:1px solid var(--line);border-radius:8px;background:var(--surface)}
+#sheet{border-collapse:collapse;font-size:14px;min-width:600px;width:100%}
+#sheet th,#sheet td{padding:7px 10px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+#sheet thead th{background:var(--bg);font-weight:700;position:sticky;top:0}
+#sheet td.n{text-align:right;font-variant-numeric:tabular-nums}
+#sheet tr.banner td{background:var(--accent);color:var(--on-accent);font-weight:700;border-bottom:0}
+#sheet tr.banner .bt{position:sticky;left:10px;width:min(520px,calc(100vw - 64px));white-space:normal;line-height:1.35}
+#sheet tr.gap td{height:12px;padding:0;border:0}
+.demo{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--ink);color:var(--bg);border-radius:8px;padding:8px 8px 8px 14px;margin-bottom:10px;font-size:14px}
+.demo button{border:1px solid var(--bg);background:transparent;color:var(--bg);border-radius:6px;padding:6px 12px;font-weight:600;min-height:40px;white-space:nowrap}
+.btn.danger{border-color:var(--danger);color:var(--danger);margin-top:12px;width:100%}
+.clearall{margin:24px 0 8px}
+.sync{margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
+.syncbar{display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-top:8px}
+.syncbar a{color:var(--accent);font-weight:600;min-height:44px;display:inline-flex;align-items:center}
+[hidden]{display:none!important}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<main>
+  <div class="demo"><span>Demo mode with sample data. Nothing is sent anywhere.</span><button type="button" id="resetdemo">Reset demo</button></div>
+  <section class="timer" aria-label="Workout timer">
+    <p class="clock idle" id="clock" role="timer" aria-live="off">00:00</p>
+    <div class="tctl">
+      <button class="btn primary grow" id="tgl" type="button">Start workout</button>
+      <button class="btn grow" id="end" type="button">End workout</button>
+    </div>
+  </section>
+
+  <section class="summary" id="summary" hidden>
+    <h2 class="head">Workout done</h2>
+    <p class="bigvol" id="sv"></p>
+    <p class="sub">Total volume lifted</p>
+    <div class="stats" id="sstats"></div>
+    <div id="sex"></div>
+    <div class="sync" id="sync" aria-live="polite">
+      <p class="sub" id="syncmsg"></p>
+      <div class="syncbar"><button class="btn" id="retry" type="button" hidden>Retry save</button><a id="sheetlink" target="_blank" rel="noopener" hidden>Open Lift log sheet</a></div>
+    </div>
+    <button class="btn grow" id="neww" type="button" style="width:100%;margin-top:12px">Start new workout</button>
+  </section>
+
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" id="t-today" aria-selected="true" type="button">Today</button>
+    <button class="tab" role="tab" id="t-hist" aria-selected="false" type="button">History</button>
+    <button class="tab" role="tab" id="t-sheet" aria-selected="false" type="button">Sheet</button>
+  </div>
+
+  <section id="v-today">
+    <form id="f" autocomplete="off">
+      <label for="name">New exercise</label>
+      <div class="addrow">
+        <input type="text" id="name" list="names" placeholder="Bench press" required maxlength="60" enterkeyhint="done">
+        <button class="btn primary" type="submit">Add</button>
+      </div>
+      <datalist id="names"></datalist>
+      <div class="unitrow">
+        <span class="sub">Weight unit for new exercises</span>
+        <div class="unit" role="group" aria-label="Weight unit">
+          <button type="button" id="u-lb" aria-pressed="true">lb</button>
+          <button type="button" id="u-kg" aria-pressed="false">kg</button>
+        </div>
+      </div>
+    </form>
+    <h2 class="head" id="thead">Today’s sets</h2>
+    <div id="today"></div>
+  </section>
+
+  <section id="v-sheet" hidden>
+    <p class="sub" style="margin:12px 0 8px">Preview of the Log tab in your Google Sheet. Each time you tap End workout, a section like these is added.</p>
+    <div class="sheetwrap"><table id="sheet" aria-label="Google Sheet preview"></table></div>
+  </section>
+
+  <section id="v-hist" hidden>
+    
+    <div class="exp"><button class="btn" id="exp" type="button">Export spreadsheet (CSV)</button><p class="sub" id="expmsg"></p></div>
+    <p class="sub" id="histmsg" aria-live="polite"></p>
+    <div id="hist"></div>
+  </section>
+</main>
+
+<script>
+const KEY="liftlogdemo:v1",TKEY="liftlogdemo:timer",UKEY="liftlogdemo:unit",EKEY="liftlogdemo:ended";
+function load(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}}
+function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+function demoData(){
+  const out=[];let n=0;
+  const day=ago=>{const d=new Date();d.setDate(d.getDate()-ago);return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")};
+  const w=(ago,list)=>list.forEach(([name,sets])=>sets.forEach(([reps,weight])=>{n++;out.push({id:"demo"+n,date:day(ago),name,reps,weight,unit:"lb",ts:Date.now()-ago*864e5+n*1000})}));
+  w(13,[["Squat",[[8,175],[6,195],[5,215],[5,215]]],["Leg press",[[12,250],[12,250],[12,270]]],["Romanian deadlift",[[8,165],[8,175],[8,175]]],["Calf raise",[[15,140],[15,140],[15,150]]]]);
+  w(11,[["Bench press",[[8,135],[8,145],[6,155]]],["Overhead press",[[8,75],[8,75],[6,85]]],["Incline dumbbell press",[[10,45],[10,45],[10,50]]],["Tricep pushdown",[[12,45],[12,50],[12,50]]]]);
+  w(9,[["Deadlift",[[5,225],[5,255],[3,295],[3,295]]],["Barbell row",[[8,125],[8,135],[8,135]]],["Lat pulldown",[[10,110],[10,120],[10,120]]],["Bicep curl",[[12,25],[12,30],[10,30]]]]);
+  w(6,[["Squat",[[8,185],[6,205],[5,225],[5,225]]],["Leg press",[[12,270],[12,270],[12,290]]],["Romanian deadlift",[[8,185],[8,185],[8,195]]],["Calf raise",[[15,150],[15,150],[15,160]]]]);
+  w(4,[["Bench press",[[8,135],[8,155],[6,165],[6,165]]],["Overhead press",[[8,85],[8,85],[6,95]]],["Incline dumbbell press",[[10,50],[10,50],[8,55]]],["Tricep pushdown",[[12,50],[12,55],[12,55]]]]);
+  w(2,[["Deadlift",[[5,245],[5,275],[3,315],[3,315]]],["Barbell row",[[8,135],[8,145],[8,145]]],["Lat pulldown",[[10,120],[10,130],[10,130]]],["Bicep curl",[[12,30],[12,30],[10,35]]]]);
+  return out;
+}
+let raw=load(KEY,[]);if(!Array.isArray(raw))raw=[];
+if(!raw.length&&!load("liftlogdemo:seeded",false)){raw=demoData();save("liftlogdemo:seeded",true)}
+// each entry is one set; older entries logged as "N sets" are split into single sets
+let entries=raw.flatMap(e=>{
+  const n=e.sets>1?e.sets:1;
+  return Array.from({length:n},(_,i)=>({id:n>1?e.id+"-"+i:e.id,date:e.date,name:e.name,reps:e.reps,weight:e.weight,unit:e.unit||"lb",ts:(e.ts||0)+i}));
+});
+save(KEY,entries);
+let unit=load(UKEY,"lb"),timer=load(TKEY,{acc:0,start:null}),ended=load(EKEY,null);
+if(unit!=="lb"&&unit!=="kg")unit="lb";
+const $=id=>document.getElementById(id);
+const pad=n=>String(n).padStart(2,"0");
+const todayKey=()=>{const d=new Date();return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate())};
+const isEnded=()=>!!ended&&ended.date===todayKey();
+const fmt=n=>Math.round(n).toLocaleString();
+const wfmt=n=>String(+Number(n).toFixed(1));
+const conv=(e,u)=>e.unit===u?e.weight:(u==="kg"?e.weight*0.45359237:e.weight/0.45359237);
+const vol=(e,u)=>e.reps*conv(e,u);
+const sum=(l,u)=>l.reduce((a,e)=>a+vol(e,u),0);
+function el(tag,cls,text){const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=text;return n}
+function groups(list){const g={};list.forEach(e=>{const k=e.name.toLowerCase();(g[k]=g[k]||{name:e.name,items:[]}).items.push(e)});return Object.values(g)}
+const setTxt=e=>(e.reps||0)+" × "+wfmt(e.weight||0)+" "+e.unit;
+
+/* Timer */
+const dur=ms=>{const s=Math.floor(ms/1000),h=Math.floor(s/3600),m=Math.floor(s%3600/60);return (h?h+":"+pad(m):pad(m))+":"+pad(s%60)};
+const elapsed=()=>timer.acc+(timer.start?Date.now()-timer.start:0);
+function drawTimer(){
+  $("clock").textContent=dur(elapsed());
+  $("clock").classList.toggle("idle",!timer.start);
+  $("tgl").textContent=timer.start?"Pause":(timer.acc?"Resume":"Start workout");
+  $("end").disabled=isEnded();
+}
+$("tgl").onclick=()=>{
+  if(timer.start){timer.acc+=Date.now()-timer.start;timer.start=null}
+  else{timer.start=Date.now();ended=null;save(EKEY,null)}
+  save(TKEY,timer);drawTimer();render();
+};
+$("end").onclick=()=>{
+  if(timer.start){timer.acc+=Date.now()-timer.start;timer.start=null}
+  ended={date:todayKey(),ms:timer.acc};
+  save(TKEY,timer);save(EKEY,ended);drawTimer();render();window.scrollTo(0,0);
+  syncSheet();
+};
+$("neww").onclick=()=>{timer={acc:0,start:null};ended=null;save(TKEY,timer);save(EKEY,null);drawTimer();render()};
+setInterval(drawTimer,250);
+
+/* Unit + tabs */
+function drawUnit(){$("u-lb").setAttribute("aria-pressed",unit==="lb");$("u-kg").setAttribute("aria-pressed",unit==="kg")}
+function setUnit(u){unit=u;save(UKEY,u);drawUnit();render()}
+$("u-lb").onclick=()=>setUnit("lb");
+$("u-kg").onclick=()=>setUnit("kg");
+function showTab(t){
+  ["today","hist","sheet"].forEach(k=>{$("v-"+k).hidden=k!==t;$("t-"+k).setAttribute("aria-selected",k===t)});
+}
+$("t-today").onclick=()=>showTab("today");
+$("t-hist").onclick=()=>showTab("hist");
+$("t-sheet").onclick=()=>showTab("sheet");
+
+/* Form */
+function addSet(name,src){
+  const last=src||entries.filter(e=>e.name.toLowerCase()===name.toLowerCase()).sort((a,b)=>b.ts-a.ts)[0];
+  entries.push({id:Date.now()+Math.random().toString(36).slice(2,6),date:todayKey(),name,
+    reps:last?last.reps:null,weight:last?last.weight:null,unit:last?last.unit:unit,ts:Date.now()});
+  if(isEnded()){ended=null;save(EKEY,null)}
+  save(KEY,entries);render();
+}
+$("f").addEventListener("submit",ev=>{
+  ev.preventDefault();
+  const n=$("name").value.trim();if(!n)return;
+  addSet(n);$("name").value="";
+});
+function remove(id){entries=entries.filter(e=>e.id!==id);save(KEY,entries);render()}
+function numInput(e,field,mode,label){
+  const i=document.createElement("input");
+  i.type="number";i.inputMode=mode;i.min="0";i.step=field==="reps"?"1":"any";
+  i.value=e[field]==null?"":e[field];i.placeholder="0";i.setAttribute("aria-label",label);
+  i.oninput=()=>{const v=parseFloat(i.value);e[field]=isNaN(v)?null:(field==="reps"?Math.round(v):v);save(KEY,entries)};
+  return i;
+}
+
+/* Render */
+function render(){
+  const dl=$("names");dl.textContent="";
+  [...new Set(entries.map(e=>e.name))].sort().forEach(n=>{const o=document.createElement("option");o.value=n;dl.appendChild(o)});
+
+  const td=entries.filter(e=>e.date===todayKey()).sort((a,b)=>a.ts-b.ts);
+  const gs=groups(td);
+
+  // summary (only once the workout is ended)
+  const sm=$("summary");sm.hidden=!isEnded();
+  if(isEnded()){
+    $("sv").textContent=fmt(sum(td,unit))+" "+unit;
+    const st=$("sstats");st.textContent="";
+    [[dur(ended.ms),"Time"],[td.length,"Sets"],[gs.length,"Exercises"]].forEach(([v,l])=>{
+      const d=el("div","stat");d.appendChild(el("b","",v));d.appendChild(el("span","",l));st.appendChild(d);
+    });
+    const sx=$("sex");sx.textContent="";
+    gs.forEach(g=>{const r=el("div","line");r.appendChild(el("span","",g.name+" ("+g.items.length+(g.items.length===1?" set)":" sets)")));r.appendChild(el("span","vol",fmt(sum(g.items,unit))+" "+unit));sx.appendChild(r)});
+  }
+
+  drawSync();renderSheet();
+  // today: one block per exercise, one row per set (Set / Reps / Weight)
+  $("thead").textContent="Today’s sets"+(td.length?" ("+td.length+")":"");
+  const box=$("today");box.textContent="";
+  if(!td.length)box.appendChild(el("p","empty","No exercises yet. Add one above."));
+  gs.forEach(g=>{
+    const w=el("div","grp");w.appendChild(el("h3","",g.name));
+    const hd=el("div","cols");["Set","Reps","Weight",""].forEach(t=>hd.appendChild(el("span","",t)));w.appendChild(hd);
+    g.items.forEach((e,i)=>{
+      const r=el("div","srow");r.appendChild(el("span","n",String(i+1)));
+      r.appendChild(numInput(e,"reps","numeric","Reps, set "+(i+1)));
+      const wc=el("div","wcell");wc.appendChild(numInput(e,"weight","decimal","Weight, set "+(i+1)));wc.appendChild(el("span","u",e.unit));r.appendChild(wc);
+      const b=el("button","del","×");b.type="button";b.setAttribute("aria-label","Delete "+g.name+" set "+(i+1));b.onclick=()=>remove(e.id);
+      r.appendChild(b);w.appendChild(r);
+    });
+    const p=el("button","plus","+");p.type="button";p.setAttribute("aria-label","Add set to "+g.name);
+    p.onclick=()=>addSet(g.name,g.items[g.items.length-1]);
+    w.appendChild(p);box.appendChild(w);
+  });
+
+  // history
+  const h=$("hist");h.textContent="";
+  const days={};entries.forEach(e=>(days[e.date]=days[e.date]||[]).push(e));
+  const keys=Object.keys(days).sort().reverse();
+  if(!keys.length){h.appendChild(el("p","empty","No history yet. Days you log show up here."));return}
+  keys.forEach(k=>{
+    const list=days[k].sort((a,b)=>a.ts-b.ts),[y,mo,d]=k.split("-").map(Number);
+    const showVol=k!==todayKey()||isEnded();
+    const label=new Date(y,mo-1,d).toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric",year:"numeric"});
+    const g2=groups(list);
+    const det=document.createElement("details"),sm2=document.createElement("summary"),m=el("div","main");
+    m.appendChild(el("strong","",label));
+    m.appendChild(el("small","",g2.length+(g2.length===1?" exercise, ":" exercises, ")+list.length+(list.length===1?" set":" sets")));
+    sm2.appendChild(m);
+    if(showVol)sm2.appendChild(el("span","vol",fmt(sum(list,unit))+" "+unit));
+    det.appendChild(sm2);
+    const ex=el("div","ex");
+    g2.forEach(g=>{
+      const hd=el("div","hd");hd.appendChild(el("span","",g.name));
+      if(showVol)hd.appendChild(el("span","vol",fmt(sum(g.items,unit))+" "+unit));
+      ex.appendChild(hd);
+      g.items.forEach((e,i)=>{const s=el("div","s");s.appendChild(el("span","","Set "+(i+1)));s.appendChild(el("b","",setTxt(e)));ex.appendChild(s)});
+    });
+    const nSets=list.length,unsynced=list.filter(e=>!synced.has(e.id)&&e.reps>0).length;
+    ex.appendChild(confirmBtn("Delete this day","Tap again to delete "+nSets+(nSets===1?" set":" sets")+(unsynced?" ("+unsynced+" not in your sheet yet)":""),()=>deleteEntries(e=>e.date===k,label)));
+    det.appendChild(ex);h.appendChild(det);
+  });
+  const total=entries.length,unsyncedAll=entries.filter(e=>!synced.has(e.id)&&e.reps>0).length;
+  const ca=el("div","clearall");
+  ca.appendChild(confirmBtn("Delete all history on this device","Tap again to delete all "+total+" sets"+(unsyncedAll?" ("+unsyncedAll+" not in your sheet yet)":""),()=>deleteEntries(()=>true,"all history")));
+  h.appendChild(ca);
+}
+
+/* Delete history (this device only; the Google Sheet is not touched) */
+function confirmBtn(label,armedLabel,onConfirm){
+  const b=el("button","btn danger",label);b.type="button";let t=null;
+  b.onclick=()=>{
+    if(t){clearTimeout(t);t=null;onConfirm();return}
+    b.textContent=armedLabel;t=setTimeout(()=>{t=null;b.textContent=label},4000);
+  };
+  return b;
+}
+function deleteEntries(match,what){
+  const before=entries.length;
+  const todayGone=entries.some(e=>e.date===todayKey()&&match(e));
+  entries=entries.filter(e=>!match(e));
+  save(KEY,entries);
+  if(todayGone&&!entries.some(e=>e.date===todayKey())){ended=null;save(EKEY,null)}
+  const n=before-entries.length;
+  $("histmsg").textContent="Deleted "+n+(n===1?" set":" sets")+" ("+what+") from this device. Your Google Sheet wasn’t changed.";
+  drawTimer();render();
+}
+
+/* Demo sync: shows what the real app does, without sending anything */
+let syncMsg="",syncRetry=false,synced=new Set();
+function drawSync(){
+  $("syncmsg").textContent=syncMsg;$("retry").hidden=true;
+  const a=$("sheetlink");a.textContent="See how it looks in the sheet";a.href="#";a.removeAttribute("target");a.hidden=!isEnded();
+  a.onclick=ev=>{ev.preventDefault();showTab("sheet");window.scrollTo(0,0)};
+}
+function demoMinutes(d){let h=0;for(const c of d)h=(h*31+c.charCodeAt(0))%1000;return 45+h%26}
+function renderSheet(){
+  const t=$("sheet");t.textContent="";
+  const cols=["Date","Exercise","Set","Reps","Weight","Unit","Volume","Workout minutes","Workout"];
+  const head=document.createElement("thead"),hr=document.createElement("tr");
+  cols.forEach(c=>hr.appendChild(el("th","",c)));head.appendChild(hr);t.appendChild(head);
+  const body=document.createElement("tbody");
+  const days={};entries.forEach(e=>(days[e.date]=days[e.date]||[]).push(e));
+  Object.keys(days).sort().forEach((d,i)=>{
+    const list=days[d].sort((a,b)=>a.ts-b.ts),[y,mo,dd]=d.split("-").map(Number);
+    const mins=d===todayKey()?(isEnded()?Math.round(ended.ms/60000):""):demoMinutes(d);
+    const names=new Set(list.map(e=>e.name.toLowerCase()));
+    const tot={};list.forEach(e=>tot[e.unit]=(tot[e.unit]||0)+e.reps*e.weight);
+    const vol=Object.keys(tot).map(u=>fmt(tot[u])+" "+u).join(" + ");
+    const pretty=new Date(y,mo-1,dd).toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric",year:"numeric"});
+    if(i>0){const g=document.createElement("tr");g.className="gap";const c=document.createElement("td");c.colSpan=cols.length;g.appendChild(c);body.appendChild(g)}
+    const b=document.createElement("tr");b.className="banner";const bc=document.createElement("td");bc.colSpan=cols.length;
+    const bt=el("div","bt");bc.appendChild(bt);
+    bt.textContent=[pretty,"Workout 1",names.size+(names.size===1?" exercise":" exercises"),list.length+(list.length===1?" set":" sets"),vol].concat(mins!==""?[mins+" min"]:[]).join("  ·  ");
+    b.appendChild(bc);body.appendChild(b);
+    const cnt={};
+    list.forEach(e=>{
+      const k=e.name.toLowerCase();cnt[k]=(cnt[k]||0)+1;
+      const r=document.createElement("tr");
+      [[d,""],[e.name,""],[cnt[k],"n"],[e.reps,"n"],[e.weight,"n"],[e.unit,""],[e.reps*e.weight,"n"],[mins,"n"],[d+" #1",""]].forEach(([v,c])=>r.appendChild(el("td",c,String(v))));
+      body.appendChild(r);
+    });
+  });
+  t.appendChild(body);
+}
+function syncSheet(){
+  const n=entries.filter(e=>e.date===todayKey()&&e.reps>0).length;
+  syncMsg=n?"Demo: in the real app, these "+n+(n===1?" set is":" sets are")+" saved to your Google Sheet now, one banner per workout.":"";
+  drawSync();
+}
+
+/* Spreadsheet export (CSV) */
+function csv(){
+  const q=v=>{v=String(v);return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v};
+  const rows=[["Date","Exercise","Set","Reps","Weight","Unit","Volume"]],cnt={};
+  entries.slice().sort((a,b)=>a.date===b.date?a.ts-b.ts:(a.date<b.date?-1:1)).forEach(e=>{
+    const k=e.date+"|"+e.name.toLowerCase();cnt[k]=(cnt[k]||0)+1;
+    rows.push([e.date,e.name,cnt[k],e.reps??"",e.weight??"",e.unit,+((e.reps||0)*(e.weight||0)).toFixed(2)]);
+  });
+  return rows.map(r=>r.map(q).join(",")).join("\n");
+}
+let dls=null;
+try{if(window.claude&&claude.use)claude.use("downloads").then(d=>{dls=d;$("exp").hidden=!d}).catch(()=>{})}catch(e){}
+$("exp").onclick=()=>{
+  if(!dls||!entries.length){$("expmsg").textContent="Log a set first, then export.";return}
+  dls.save({filename:"lift-log-demo-"+todayKey()+".csv",data:csv()})
+    .then(()=>{$("expmsg").textContent="Saved."})
+    .catch(e=>{$("expmsg").textContent=e&&e.code==="declined"?"Export cancelled.":"Export isn’t available here."});
+};
+
+/* Reset demo */
+$("resetdemo").onclick=()=>{
+  try{["v1","timer","unit","ended","synced","seeded"].forEach(k=>localStorage.removeItem("liftlogdemo:"+k))}catch(e){}
+  entries=demoData();save(KEY,entries);save("liftlogdemo:seeded",true);
+  timer={acc:0,start:null};ended=null;unit="lb";syncMsg="";
+  save(TKEY,timer);save(EKEY,null);save(UKEY,unit);
+  $("histmsg").textContent="Demo reset to the sample data.";
+  drawUnit();drawTimer();drawSync();render();
+};
+
+drawUnit();drawTimer();render();
+</script>
+</body>
+</html>
+
+</body></html>
