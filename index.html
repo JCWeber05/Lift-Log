@@ -2,8 +2,9 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' https://script.google.com https://script.googleusercontent.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#06D900">
+<meta name="theme-color" content="#2B4BD8">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Lift log">
@@ -107,6 +108,13 @@ details[open] summary::after{content:"−"}
 .ex .s{display:flex;gap:12px;color:var(--muted);font-size:15px;padding:2px 0}
 .ex .s b{color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}
 .exp{margin:16px 0}
+.banner{display:flex;gap:10px;align-items:flex-start;justify-content:space-between;background:var(--surface);border:1px solid var(--line);border-left:6px solid var(--accent);border-radius:8px;padding:10px 4px 10px 12px;margin:12px 0;font-size:15px}
+.banner.err{border-left-color:var(--danger)}
+.banner button{border:0;background:transparent;font-size:24px;line-height:1;width:44px;height:36px;color:var(--muted);flex:none}
+.hbtns{display:flex;flex-wrap:wrap;gap:10px;margin-top:10px}
+.hbtns .btn{flex:1 1 140px}
+.last{margin:2px 0 4px;color:var(--muted);font-size:15px;overflow-wrap:anywhere}
+.sharemsg{margin:8px 0 0}
 .btn.danger{border-color:var(--danger);color:var(--danger);margin-top:12px;width:100%}
 .clearall{margin:24px 0 8px}
 .sync{margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
@@ -126,6 +134,8 @@ details[open] summary::after{content:"−"}
     </div>
   </section>
 
+  <div class="banner" id="banner" role="alert" hidden><span id="bannertext"></span><button type="button" id="bannerx" aria-label="Dismiss">×</button></div>
+
   <section class="summary" id="summary" hidden>
     <h2 class="head">Workout done</h2>
     <p class="bigvol" id="sv"></p>
@@ -136,6 +146,8 @@ details[open] summary::after{content:"−"}
       <p class="sub" id="syncmsg"></p>
       <div class="syncbar"><button class="btn" id="retry" type="button" hidden>Retry save</button><a id="sheetlink" target="_blank" rel="noopener" hidden>Open Lift log sheet</a></div>
     </div>
+    <button class="btn primary grow" id="sharebtn" type="button" style="width:100%;margin-top:12px">Share workout</button>
+    <p class="sub sharemsg" id="sharemsg" aria-live="polite"></p>
     <button class="btn grow" id="neww" type="button" style="width:100%;margin-top:12px">Start new workout</button>
   </section>
 
@@ -165,6 +177,19 @@ details[open] summary::after{content:"−"}
   </section>
 
   <section id="v-hist" hidden>
+    <details class="cfg" id="health">
+      <summary><div class="main"><strong>Data and backup</strong><small id="hstat"></small></div></summary>
+      <div class="ex">
+        <p class="sub" id="hdetail"></p>
+        <div class="hbtns">
+          <button class="btn" id="bexp" type="button">Export backup</button>
+          <button class="btn" id="bimp" type="button">Import backup</button>
+          <button class="btn" id="brest" type="button" hidden>Restore from sheet</button>
+        </div>
+        <input type="file" id="impfile" accept=".json,application/json" hidden>
+        <p class="sub" id="hmsg" aria-live="polite"></p>
+      </div>
+    </details>
     <details class="cfg" id="cfg">
       <summary><div class="main"><strong>Google Sheets sync</strong><small id="cfgstat"></small></div></summary>
       <div class="ex">
@@ -182,265 +207,6 @@ details[open] summary::after{content:"−"}
   </section>
 </main>
 
-<script>
-const KEY="liftlog:v1",TKEY="liftlog:timer",UKEY="liftlog:unit",EKEY="liftlog:ended";
-function load(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}}
-function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
-let raw=load(KEY,[]);if(!Array.isArray(raw))raw=[];
-// each entry is one set; older entries logged as "N sets" are split into single sets
-let entries=raw.flatMap(e=>{
-  const n=e.sets>1?e.sets:1;
-  return Array.from({length:n},(_,i)=>({id:n>1?e.id+"-"+i:e.id,date:e.date,name:e.name,reps:e.reps,weight:e.weight,unit:e.unit||"lb",ts:(e.ts||0)+i}));
-});
-save(KEY,entries);
-let unit=load(UKEY,"lb"),timer=load(TKEY,{acc:0,start:null}),ended=load(EKEY,null);
-if(unit!=="lb"&&unit!=="kg")unit="lb";
-const $=id=>document.getElementById(id);
-const pad=n=>String(n).padStart(2,"0");
-const todayKey=()=>{const d=new Date();return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate())};
-const isEnded=()=>!!ended&&ended.date===todayKey();
-const fmt=n=>Math.round(n).toLocaleString();
-const wfmt=n=>String(+Number(n).toFixed(1));
-const conv=(e,u)=>e.unit===u?e.weight:(u==="kg"?e.weight*0.45359237:e.weight/0.45359237);
-const vol=(e,u)=>e.reps*conv(e,u);
-const sum=(l,u)=>l.reduce((a,e)=>a+vol(e,u),0);
-function el(tag,cls,text){const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=text;return n}
-function groups(list){const g={};list.forEach(e=>{const k=e.name.toLowerCase();(g[k]=g[k]||{name:e.name,items:[]}).items.push(e)});return Object.values(g)}
-const setTxt=e=>(e.reps||0)+" × "+wfmt(e.weight||0)+" "+e.unit;
-
-/* Timer */
-const dur=ms=>{const s=Math.floor(ms/1000),h=Math.floor(s/3600),m=Math.floor(s%3600/60);return (h?h+":"+pad(m):pad(m))+":"+pad(s%60)};
-const elapsed=()=>timer.acc+(timer.start?Date.now()-timer.start:0);
-function drawTimer(){
-  $("clock").textContent=dur(elapsed());
-  $("clock").classList.toggle("idle",!timer.start);
-  $("tgl").textContent=timer.start?"Pause":(timer.acc?"Resume":"Start workout");
-  $("end").disabled=isEnded();
-}
-$("tgl").onclick=()=>{
-  if(timer.start){timer.acc+=Date.now()-timer.start;timer.start=null}
-  else{timer.start=Date.now();ended=null;save(EKEY,null)}
-  save(TKEY,timer);drawTimer();render();
-};
-$("end").onclick=()=>{
-  if(timer.start){timer.acc+=Date.now()-timer.start;timer.start=null}
-  ended={date:todayKey(),ms:timer.acc};
-  save(TKEY,timer);save(EKEY,ended);drawTimer();render();window.scrollTo(0,0);
-  syncSheet();
-};
-$("neww").onclick=()=>{timer={acc:0,start:null};ended=null;save(TKEY,timer);save(EKEY,null);drawTimer();render()};
-setInterval(drawTimer,250);
-
-/* Unit + tabs */
-function drawUnit(){$("u-lb").setAttribute("aria-pressed",unit==="lb");$("u-kg").setAttribute("aria-pressed",unit==="kg")}
-function setUnit(u){unit=u;save(UKEY,u);drawUnit();render()}
-$("u-lb").onclick=()=>setUnit("lb");
-$("u-kg").onclick=()=>setUnit("kg");
-function showTab(t){
-  const h=t==="hist";
-  $("v-today").hidden=h;$("v-hist").hidden=!h;
-  $("t-today").setAttribute("aria-selected",!h);$("t-hist").setAttribute("aria-selected",h);
-}
-$("t-today").onclick=()=>showTab("today");
-$("t-hist").onclick=()=>showTab("hist");
-
-/* Form */
-function addSet(name,src){
-  const last=src||entries.filter(e=>e.name.toLowerCase()===name.toLowerCase()).sort((a,b)=>b.ts-a.ts)[0];
-  entries.push({id:Date.now()+Math.random().toString(36).slice(2,6),date:todayKey(),name,
-    reps:last?last.reps:null,weight:last?last.weight:null,unit:last?last.unit:unit,ts:Date.now()});
-  if(isEnded()){ended=null;save(EKEY,null)}
-  save(KEY,entries);render();
-}
-$("f").addEventListener("submit",ev=>{
-  ev.preventDefault();
-  const n=$("name").value.trim();if(!n)return;
-  addSet(n);$("name").value="";
-});
-function remove(id){entries=entries.filter(e=>e.id!==id);save(KEY,entries);render()}
-function numInput(e,field,mode,label){
-  const i=document.createElement("input");
-  i.type="number";i.inputMode=mode;i.min="0";i.step=field==="reps"?"1":"any";
-  i.value=e[field]==null?"":e[field];i.placeholder="0";i.setAttribute("aria-label",label);
-  i.oninput=()=>{const v=parseFloat(i.value);e[field]=isNaN(v)?null:(field==="reps"?Math.round(v):v);save(KEY,entries)};
-  return i;
-}
-
-/* Render */
-function render(){
-  const dl=$("names");dl.textContent="";
-  [...new Set(entries.map(e=>e.name))].sort().forEach(n=>{const o=document.createElement("option");o.value=n;dl.appendChild(o)});
-
-  const td=entries.filter(e=>e.date===todayKey()).sort((a,b)=>a.ts-b.ts);
-  const gs=groups(td);
-
-  // summary (only once the workout is ended)
-  const sm=$("summary");sm.hidden=!isEnded();
-  if(isEnded()){
-    $("sv").textContent=fmt(sum(td,unit))+" "+unit;
-    const st=$("sstats");st.textContent="";
-    [[dur(ended.ms),"Time"],[td.length,"Sets"],[gs.length,"Exercises"]].forEach(([v,l])=>{
-      const d=el("div","stat");d.appendChild(el("b","",v));d.appendChild(el("span","",l));st.appendChild(d);
-    });
-    const sx=$("sex");sx.textContent="";
-    gs.forEach(g=>{const r=el("div","line");r.appendChild(el("span","",g.name+" ("+g.items.length+(g.items.length===1?" set)":" sets)")));r.appendChild(el("span","vol",fmt(sum(g.items,unit))+" "+unit));sx.appendChild(r)});
-  }
-
-  drawSync();
-  // today: one block per exercise, one row per set (Set / Reps / Weight)
-  $("thead").textContent="Today’s sets"+(td.length?" ("+td.length+")":"");
-  const box=$("today");box.textContent="";
-  if(!td.length)box.appendChild(el("p","empty","No exercises yet. Add one above."));
-  gs.forEach(g=>{
-    const w=el("div","grp");w.appendChild(el("h3","",g.name));
-    const hd=el("div","cols");["Set","Reps","Weight",""].forEach(t=>hd.appendChild(el("span","",t)));w.appendChild(hd);
-    g.items.forEach((e,i)=>{
-      const r=el("div","srow");r.appendChild(el("span","n",String(i+1)));
-      r.appendChild(numInput(e,"reps","numeric","Reps, set "+(i+1)));
-      const wc=el("div","wcell");wc.appendChild(numInput(e,"weight","decimal","Weight, set "+(i+1)));wc.appendChild(el("span","u",e.unit));r.appendChild(wc);
-      const b=el("button","del","×");b.type="button";b.setAttribute("aria-label","Delete "+g.name+" set "+(i+1));b.onclick=()=>remove(e.id);
-      r.appendChild(b);w.appendChild(r);
-    });
-    const p=el("button","plus","+");p.type="button";p.setAttribute("aria-label","Add set to "+g.name);
-    p.onclick=()=>addSet(g.name,g.items[g.items.length-1]);
-    w.appendChild(p);box.appendChild(w);
-  });
-
-  // history
-  const h=$("hist");h.textContent="";
-  const days={};entries.forEach(e=>(days[e.date]=days[e.date]||[]).push(e));
-  const keys=Object.keys(days).sort().reverse();
-  if(!keys.length){h.appendChild(el("p","empty","No history yet. Days you log show up here."));return}
-  keys.forEach(k=>{
-    const list=days[k].sort((a,b)=>a.ts-b.ts),[y,mo,d]=k.split("-").map(Number);
-    const showVol=k!==todayKey()||isEnded();
-    const label=new Date(y,mo-1,d).toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric",year:"numeric"});
-    const g2=groups(list);
-    const det=document.createElement("details"),sm2=document.createElement("summary"),m=el("div","main");
-    m.appendChild(el("strong","",label));
-    m.appendChild(el("small","",g2.length+(g2.length===1?" exercise, ":" exercises, ")+list.length+(list.length===1?" set":" sets")));
-    sm2.appendChild(m);
-    if(showVol)sm2.appendChild(el("span","vol",fmt(sum(list,unit))+" "+unit));
-    det.appendChild(sm2);
-    const ex=el("div","ex");
-    g2.forEach(g=>{
-      const hd=el("div","hd");hd.appendChild(el("span","",g.name));
-      if(showVol)hd.appendChild(el("span","vol",fmt(sum(g.items,unit))+" "+unit));
-      ex.appendChild(hd);
-      g.items.forEach((e,i)=>{const s=el("div","s");s.appendChild(el("span","","Set "+(i+1)));s.appendChild(el("b","",setTxt(e)));ex.appendChild(s)});
-    });
-    const nSets=list.length,unsynced=list.filter(e=>!synced.has(e.id)&&e.reps>0).length;
-    ex.appendChild(confirmBtn("Delete this day","Tap again to delete "+nSets+(nSets===1?" set":" sets")+(unsynced?" ("+unsynced+" not in your sheet yet)":""),()=>deleteEntries(e=>e.date===k,label)));
-    det.appendChild(ex);h.appendChild(det);
-  });
-  const total=entries.length,unsyncedAll=entries.filter(e=>!synced.has(e.id)&&e.reps>0).length;
-  const ca=el("div","clearall");
-  ca.appendChild(confirmBtn("Delete all history on this device","Tap again to delete all "+total+" sets"+(unsyncedAll?" ("+unsyncedAll+" not in your sheet yet)":""),()=>deleteEntries(()=>true,"all history")));
-  h.appendChild(ca);
-}
-
-/* Delete history (this device only; the Google Sheet is not touched) */
-function confirmBtn(label,armedLabel,onConfirm){
-  const b=el("button","btn danger",label);b.type="button";let t=null;
-  b.onclick=()=>{
-    if(t){clearTimeout(t);t=null;onConfirm();return}
-    b.textContent=armedLabel;t=setTimeout(()=>{t=null;b.textContent=label},4000);
-  };
-  return b;
-}
-function deleteEntries(match,what){
-  const before=entries.length;
-  const todayGone=entries.some(e=>e.date===todayKey()&&match(e));
-  entries=entries.filter(e=>!match(e));
-  save(KEY,entries);
-  if(todayGone&&!entries.some(e=>e.date===todayKey())){ended=null;save(EKEY,null)}
-  const n=before-entries.length;
-  $("histmsg").textContent="Deleted "+n+(n===1?" set":" sets")+" ("+what+") from this device. Your Google Sheet wasn’t changed.";
-  drawTimer();render();
-}
-
-/* Google Sheets sync: posts new sets to your Apps Script web app when a workout ends */
-const SKEY="liftlog:synced",CKEY="liftlog:cfg";
-let synced=new Set(load(SKEY,[])),cfg=load(CKEY,{url:"",token:"",sheetUrl:""}),syncing=false,syncMsg="",syncRetry=false;
-if(!cfg||typeof cfg!=="object")cfg={url:"",token:"",sheetUrl:""};
-function drawSync(){
-  $("syncmsg").textContent=syncMsg;
-  $("retry").hidden=!syncRetry||syncing;
-  const a=$("sheetlink");a.hidden=!(cfg.sheetUrl&&isEnded());if(cfg.sheetUrl)a.href=cfg.sheetUrl;
-}
-function drawCfg(){
-  $("cfgstat").textContent=cfg.url&&cfg.token?"Connected to your sheet":"Not set up yet";
-  $("cfgurl").value=cfg.url||"";$("cfgtok").value=cfg.token||"";
-}
-async function post(rows){
-  const res=await fetch(cfg.url,{method:"POST",redirect:"follow",body:JSON.stringify({token:cfg.token,rows})});
-  let j;try{j=await res.json()}catch(e){throw {code:"bad_response"}}
-  if(!j||!j.ok)throw {code:j&&j.error==="bad_token"?"bad_token":"script_error",msg:j&&j.error};
-  if(j.sheetUrl&&j.sheetUrl!==cfg.sheetUrl){cfg.sheetUrl=j.sheetUrl;save(CKEY,cfg)}
-  return j;
-}
-function describe(err){
-  const c=err&&err.code;
-  if(c==="bad_token")return "The secret token doesn’t match the script. Check it in History → Google Sheets sync.";
-  if(c==="bad_response")return "The web app URL didn’t answer like your script. Check the URL and that access is set to Anyone.";
-  if(c==="script_error")return "The script reported an error"+(err.msg?": "+err.msg:".");
-  return "Couldn’t reach Google Sheets. Check your connection, then tap Retry.";
-}
-async function syncSheet(){
-  if(syncing)return;
-  syncRetry=false;
-  if(!cfg.url||!cfg.token){syncMsg="Sheet sync isn’t set up. Add your script URL in History → Google Sheets sync.";drawSync();return}
-  const all=entries.slice().sort((a,b)=>a.date===b.date?a.ts-b.ts:(a.date<b.date?-1:1));
-  const no={},cnt={};
-  all.forEach(e=>{const k=e.date+"|"+e.name.toLowerCase();cnt[k]=(cnt[k]||0)+1;no[e.id]=cnt[k]});
-  const todo=all.filter(e=>!synced.has(e.id)&&e.reps>0);
-  if(!todo.length){syncMsg=entries.length?"Everything is already saved to your sheet.":"";drawSync();return}
-  const mins=ended?Math.round(ended.ms/60000):"";
-  const rows=todo.map(e=>[e.date,e.name,no[e.id],e.reps,e.weight==null?"":e.weight,e.unit,+(e.reps*(e.weight||0)).toFixed(2),e.date===todayKey()?mins:"",e.id]);
-  syncing=true;syncMsg="Saving "+todo.length+(todo.length===1?" set":" sets")+" to Google Sheets…";drawSync();
-  try{
-    await post(rows);
-    todo.forEach(e=>synced.add(e.id));save(SKEY,[...synced]);
-    syncMsg="Saved "+todo.length+(todo.length===1?" set":" sets")+" to your Lift log sheet.";
-  }catch(err){syncRetry=true;syncMsg=describe(err)+" Retrying is safe: sets already in the sheet are skipped."}
-  syncing=false;drawSync();
-}
-$("retry").onclick=()=>syncSheet();
-$("cfgsave").onclick=async()=>{
-  cfg.url=$("cfgurl").value.trim();cfg.token=$("cfgtok").value.trim();
-  if(!/^https:\/\/script\.google\.com\/.+\/exec/.test(cfg.url)){$("cfgmsg").textContent="That doesn’t look like a web app URL. It should start with https://script.google.com and end with /exec.";return}
-  if(!cfg.token){$("cfgmsg").textContent="Enter the secret token from your script.";return}
-  $("cfgmsg").textContent="Testing…";
-  try{await post([]);save(CKEY,cfg);$("cfgmsg").textContent="Connected. Sets will save when you tap End workout.";drawCfg();drawSync()}
-  catch(err){$("cfgmsg").textContent=describe(err)}
-};
-
-/* Spreadsheet export (CSV opens in Google Sheets, Excel, Numbers) */
-function csv(){
-  const q=v=>{v=String(v);return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v};
-  const rows=[["Date","Exercise","Set","Reps","Weight","Unit","Volume"]],cnt={};
-  entries.slice().sort((a,b)=>a.date===b.date?a.ts-b.ts:(a.date<b.date?-1:1)).forEach(e=>{
-    const k=e.date+"|"+e.name.toLowerCase();cnt[k]=(cnt[k]||0)+1;
-    rows.push([e.date,e.name,cnt[k],e.reps??"",e.weight??"",e.unit,+((e.reps||0)*(e.weight||0)).toFixed(2)]);
-  });
-  return rows.map(r=>r.map(q).join(",")).join("\n");
-}
-$("exp").onclick=async()=>{
-  if(!entries.length){$("expmsg").textContent="Log a set first, then export.";return}
-  const name="lift-log-"+todayKey()+".csv",file=new File([csv()],name,{type:"text/csv"});
-  try{
-    if(navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],title:"Lift log"});$("expmsg").textContent="Shared.";return}
-    const a=document.createElement("a");a.href=URL.createObjectURL(file);a.download=name;document.body.appendChild(a);a.click();a.remove();
-    $("expmsg").textContent="Saved to your downloads.";
-  }catch(e){if(e&&e.name!=="AbortError")$("expmsg").textContent="Export didn’t work here."}
-};
-
-/* Offline support */
-if("serviceWorker" in navigator&&location.protocol.startsWith("http")){
-  window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));
-}
-
-drawUnit();drawTimer();drawCfg();render();
-</script>
+<script src="app.js"></script>
 </body>
 </html>
