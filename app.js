@@ -21,7 +21,11 @@ function restoreDraftState(){
   if(!draft||!draft.entries||!draft.entries.length)return false;
   const list=safeArray(draft.entries).filter(e=>e&&typeof e=="object").map(e=>({
     id:String(e.id||""),date:String(e.date||todayKey()),name:String(e.name||"").trim(),reps:Number(e.reps),weight:Number(e.weight),unit:e.unit==="kg"?"kg":"lb",ts:Number(e.ts)||Date.now()}
-  )).filter(e=>e.id&&e.name&&e.date&&Number.isFinite(e.reps)?e.reps>0:true && Number.isFinite(e.weight)?e.weight>0:true);
+  )).filter(e=>{
+    const validReps = !Number.isFinite(e.reps) || e.reps > 0;
+    const validWeight = !Number.isFinite(e.weight) || e.weight > 0;
+    return e.id && e.name && e.date && validReps && validWeight;
+  });
   if(!list.length)return false;
   const hasActive=!!(draft.ended||draft.timer&&((draft.timer.acc&&draft.timer.acc>0)||draft.timer.start));
   if(!hasActive&&!list.some(e=>e.date===todayKey()))return false;
@@ -83,8 +87,8 @@ function validPositiveNumber(value,field){
   return n<=5000;
 }
 function isValidSetEntry(e){
-  return !!(e&&e.name&&e.date&&e.unit&&String(e.unit)==="lb"||String(e.unit)==="kg")&&
-    (e.reps==null || (Number.isFinite(Number(e.reps))&&Number(e.reps)>0&&Number(e.reps)<=1000))&&
+  return !!(e && e.name && e.date && (e.unit === "lb" || e.unit === "kg")) &&
+    (e.reps==null || (Number.isFinite(Number(e.reps))&&Number(e.reps)>0&&Number(e.reps)<=1000)) &&
     (e.weight==null || (Number.isFinite(Number(e.weight))&&Number(e.weight)>0&&Number(e.weight)<=5000));
 }
 if(restoreDraftState())notice="Restored your last in-progress workout. You can keep editing it or save it again.";
@@ -274,7 +278,7 @@ function render(){
       g.items.forEach((e,i)=>{const s=el("div","s");s.appendChild(el("span","","Set "+(i+1)));s.appendChild(el("b","",setTxt(e)));ex.appendChild(s)});
     });
     const nSets=list.length,unsynced=list.filter(e=>!synced.has(e.id)&&e.reps>0).length;
-    ex.appendChild(confirmBtn("Delete this day","Tap again to delete "+nSets+(nSets===1?" set":" sets")+(unsynced?" ("+unsynced+" not in your sheet yet)":""),()=>deleteEntries(e=>e.date===k,label,()=>{})));
+    ex.appendChild(confirmBtn("Delete this day","Tap again to delete "+nSets+(nSets===1?" set":" sets")+(unsynced?" ("+unsynced+" not in your sheet yet)":""),()=>deleteEntries(e=>e.date===k,what=k)));
     det.appendChild(ex);h.appendChild(det);
   });
   const total=entries.length,unsyncedAll=entries.filter(e=>!synced.has(e.id)&&e.reps>0).length;
@@ -409,8 +413,8 @@ $("bexp").onclick=async()=>{
 // Only known fields are accepted, with strict types and ranges, so a bad file can't put anything odd in your history.
 function cleanEntry(o){
   if(!o||typeof o!=="object")return null;
-  const id=String(o.id==null?"":"+o.id),date=String(o.date==null?"":o.date);
-  if(!/^[A-Za-z0-9._-]{1,64}$/.test(id)||!/^?/.test(date))return null;
+  const id=String(o.id==null?"":o.id),date=String(o.date==null?"":o.date);
+  if(!/^[A-Za-z0-9._-]{1,64}$/.test(id) || !/^\d{4}-\d{2}-\d{2}$/.test(date))return null;
   const name=String(o.name==null?"":o.name).replace(/[\u0000-\u001f\u007f]/g,"").trim();
   if(!name||name.length>60)return null;
   const num=(v,lo,hi)=>{if(v===null||v===undefined||v==="")return null;const n=typeof v==="number"?v:Number(v);return isFinite(n)&&n>=lo&&n<=hi?n:undefined};
