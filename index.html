@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' https://script.google.com https://script.googleusercontent.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://script.google.com; manifest-src 'self';">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#2B4BD8">
 <meta name="mobile-web-app-capable" content="yes">
@@ -108,7 +108,7 @@ details[open] summary::after{content:"−"}
 .ex .s{display:flex;gap:12px;color:var(--muted);font-size:15px;padding:2px 0}
 .ex .s b{color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}
 .exp{margin:16px 0}
-.banner{display:flex;gap:10px;align-items:flex-start;justify-content:space-between;background:var(--surface);border:1px solid var(--line);border-left:6px solid var(--accent);border-radius:8px;padding:10px 4px 10px 12px;margin:12px 0;font-size:15px}
+.banner{display:flex;gap:10px;align-items:flex-start;justify-content:space-between;background:var(--surface);border:1px solid var(--line);border-left:6px solid var(--accent);border-radius:8px;padding:14px 12px;margin:10px 0 4px}
 .banner.err{border-left-color:var(--danger)}
 .banner button{border:0;background:transparent;font-size:24px;line-height:1;width:44px;height:36px;color:var(--muted);flex:none}
 .hbtns{display:flex;flex-wrap:wrap;gap:10px;margin-top:10px}
@@ -150,6 +150,10 @@ details[open] summary::after{content:"−"}
     <p class="sub sharemsg" id="sharemsg" aria-live="polite"></p>
     <button class="btn grow" id="neww" type="button" style="width:100%;margin-top:12px">Start new workout</button>
   </section>
+
+  <div class="hbtns" style="margin-top: 8px; margin-bottom: 6px;">
+    <button class="btn" id="undo" type="button" hidden>Undo last change</button>
+  </div>
 
   <div class="tabs" role="tablist">
     <button class="tab" role="tab" id="t-today" aria-selected="true" type="button">Today</button>
