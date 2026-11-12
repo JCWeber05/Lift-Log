@@ -1,41 +1,8 @@
 const $=id=>document.getElementById(id);
-const KEY="liftlog:v1",BAK="liftlog:v1:bak",TKEY="liftlog:timer",UKEY="liftlog:unit",EKEY="liftlog:ended",BKEY="liftlog:lastbackup",DAMAGED="liftlog:damaged:",DRAFT_KEY="liftlog:draft:v1",UNDO_KEY="liftlog:undo:v1";
+const KEY="liftlog:v1",BAK="liftlog:v1:bak",TKEY="liftlog:timer",UKEY="liftlog:unit",EKEY="liftlog:ended",BKEY="liftlog:lastbackup",DAMAGED="liftlog:damaged:";
 let storageOK=true,notice="";
-let undoStack=load(UNDO_KEY,[]);
 function load(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}}
 function save(k,v){try{localStorage.setItem(k,JSON.stringify(v));return true}catch(e){storageOK=false;return false}}
-function safeArray(v){return Array.isArray(v)?v:[]}
-function stateSnapshot(){return {entries:entries.map(e=>({...e})),timer:{...timer},ended:ended?{...ended}:null,unit}} 
-function persistDraftState(){
-  const payload={entries:entries.map(e=>({...e})),timer:{...timer},ended:ended?{...ended}:null,unit,updatedAt:Date.now()};
-  save(DRAFT_KEY,payload);
-}
-function rememberUndo(label){
-  const snapshot={label,ts:Date.now(),state:stateSnapshot()};
-  undoStack.push(snapshot);
-  if(undoStack.length>12)undoStack.shift();
-  save(UNDO_KEY,undoStack);
-}
-function restoreDraftState(){
-  const draft=load(DRAFT_KEY,null);
-  if(!draft||!draft.entries||!draft.entries.length)return false;
-  const list=safeArray(draft.entries).filter(e=>e&&typeof e=="object").map(e=>({
-    id:String(e.id||""),date:String(e.date||todayKey()),name:String(e.name||"").trim(),reps:Number(e.reps),weight:Number(e.weight),unit:e.unit==="kg"?"kg":"lb",ts:Number(e.ts)||Date.now()}
-  )).filter(e=>{
-    const validReps = !Number.isFinite(e.reps) || e.reps > 0;
-    const validWeight = !Number.isFinite(e.weight) || e.weight > 0;
-    return e.id && e.name && e.date && validReps && validWeight;
-  });
-  if(!list.length)return false;
-  const hasActive=!!(draft.ended||draft.timer&&((draft.timer.acc&&draft.timer.acc>0)||draft.timer.start));
-  if(!hasActive&&!list.some(e=>e.date===todayKey()))return false;
-  entries=list;
-  timer=draft.timer&&typeof draft.timer=="object"?{acc:Number(draft.timer.acc)||0,start:draft.timer.start||null}:{acc:0,start:null};
-  ended=draft.ended&&typeof draft.ended=="object"?{date:String(draft.ended.date||todayKey()),ms:Number(draft.ended.ms)||0}:null;
-  unit=(draft.unit==="kg")?"kg":"lb";
-  saveEntries(true);save(TKEY,timer);save(EKEY,ended);save(UKEY,unit);persistDraftState();
-  return true;
-}
 // Reads saved history. Damaged data is never overwritten: it is set aside, and the previous copy is used instead.
 function readEntries(){
   const tryKey=k=>{
@@ -68,30 +35,17 @@ function saveEntries(mirror){
     try{if(mirror)localStorage.setItem(BAK,next);else if(prev&&prev!==next)localStorage.setItem(BAK,prev)}catch(e){}
   }catch(e){ok=false}
   storageOK=ok;
-  if(!ok)showBanner("Couldn’t save to this device (storage is full or blocked). Your latest changes could be lost if you close the app. Export a backup, or end the workout to save to your sheet.",true)
+  if(!ok)showBanner("Couldn’t save to this device (storage is full or blocked). Your latest changes could be lost if you close the app. Export a backup, or end the workout to save to your sheet.",true);
   else if($("banner").classList.contains("err"))$("banner").hidden=true;
   return ok;
 }
 function showBanner(text,isErr){const b=$("banner");$("bannertext").textContent=text;b.classList.toggle("err",!!isErr);b.hidden=false}
 let raw=readEntries();
 // each entry is one set; older entries logged as "N sets" are split into single sets
-let entries=raw.filter(e=>e&&typeof e=="object").flatMap(e=>{
+let entries=raw.filter(e=>e&&typeof e==="object").flatMap(e=>{
   const n=e.sets>1?e.sets:1;
   return Array.from({length:n},(_,i)=>({id:n>1?e.id+"-"+i:e.id,date:e.date,name:e.name,reps:e.reps,weight:e.weight,unit:e.unit||"lb",ts:(e.ts||0)+i}));
 });
-const normalizeText=(s)=>String(s||"").trim();
-function validPositiveNumber(value,field){
-  const n=Number(value);
-  if(!Number.isFinite(n)||n<=0)return false;
-  if(field==="reps")return Number.isInteger(n)&&n<=1000;
-  return n<=5000;
-}
-function isValidSetEntry(e){
-  return !!(e && e.name && e.date && (e.unit === "lb" || e.unit === "kg")) &&
-    (e.reps==null || (Number.isFinite(Number(e.reps))&&Number(e.reps)>0&&Number(e.reps)<=1000)) &&
-    (e.weight==null || (Number.isFinite(Number(e.weight))&&Number(e.weight)>0&&Number(e.weight)<=5000));
-}
-if(restoreDraftState())notice="Restored your last in-progress workout. You can keep editing it or save it again.";
 saveEntries();
 let unit=load(UKEY,"lb"),timer=load(TKEY,{acc:0,start:null}),ended=load(EKEY,null);
 if(unit!=="lb"&&unit!=="kg")unit="lb";
@@ -119,20 +73,20 @@ function drawTimer(){
 $("tgl").onclick=()=>{
   if(timer.start){timer.acc+=Date.now()-timer.start;timer.start=null}
   else{timer.start=Date.now();ended=null;save(EKEY,null)}
-  save(TKEY,timer);persistDraftState();drawTimer();render();
+  save(TKEY,timer);drawTimer();render();
 };
 $("end").onclick=()=>{
   if(timer.start){timer.acc+=Date.now()-timer.start;timer.start=null}
   ended={date:todayKey(),ms:timer.acc};
-  save(TKEY,timer);save(EKEY,ended);persistDraftState();drawTimer();render();window.scrollTo(0,0);
+  save(TKEY,timer);save(EKEY,ended);drawTimer();render();window.scrollTo(0,0);
   syncSheet();
 };
-$("neww").onclick=()=>{timer={acc:0,start:null};ended=null;save(TKEY,timer);save(EKEY,null);persistDraftState();drawTimer();render();};
+$("neww").onclick=()=>{timer={acc:0,start:null};ended=null;save(TKEY,timer);save(EKEY,null);drawTimer();render()};
 setInterval(drawTimer,250);
 
 /* Unit + tabs */
 function drawUnit(){$("u-lb").setAttribute("aria-pressed",unit==="lb");$("u-kg").setAttribute("aria-pressed",unit==="kg")}
-function setUnit(u){if(unit===u)return;unit=u;rememberUndo("unit change");save(UKEY,u);drawUnit();persistDraftState();render()}
+function setUnit(u){unit=u;save(UKEY,u);drawUnit();render()}
 $("u-lb").onclick=()=>setUnit("lb");
 $("u-kg").onclick=()=>setUnit("kg");
 function showTab(t){
@@ -145,71 +99,24 @@ $("t-hist").onclick=()=>showTab("hist");
 
 /* Form */
 function addSet(name,src){
-  const trimmed=normalizeText(name);
-  if(!trimmed){showBanner("Enter an exercise name before adding a set.",true);return}
-  const last=src||entries.filter(e=>e.name.toLowerCase()===trimmed.toLowerCase()).sort((a,b)=>b.ts-a.ts)[0];
-  const next={id:Date.now()+Math.random().toString(36).slice(2,6),date:todayKey(),name:trimmed,reps:last&&Number(last.reps)>0?last.reps:null,weight:last&&Number(last.weight)>0?last.weight:null,unit:last?last.unit:unit,ts:Date.now()};
-  if(!isValidSetEntry(next)){
-    next.reps=null;next.weight=null;
-  }
-  rememberUndo("add set");
-  entries.push(next);
+  const last=src||entries.filter(e=>e.name.toLowerCase()===name.toLowerCase()).sort((a,b)=>b.ts-a.ts)[0];
+  entries.push({id:Date.now()+Math.random().toString(36).slice(2,6),date:todayKey(),name,
+    reps:last?last.reps:null,weight:last?last.weight:null,unit:last?last.unit:unit,ts:Date.now()});
   if(isEnded()){ended=null;save(EKEY,null)}
-  saveEntries();persistDraftState();render();askPersist();
+  saveEntries();render();askPersist();
 }
 $("f").addEventListener("submit",ev=>{
   ev.preventDefault();
-  const n=$("name").value.trim();if(!n){showBanner("Exercise name is required.",true);return}
+  const n=$("name").value.trim();if(!n)return;
   addSet(n);$("name").value="";
 });
-function remove(id){rememberUndo("remove set");entries=entries.filter(e=>e.id!==id);saveEntries(true);persistDraftState();render()}
+function remove(id){entries=entries.filter(e=>e.id!==id);saveEntries(true);render()}
 function numInput(e,field,mode,label){
   const i=document.createElement("input");
   i.type="number";i.inputMode=mode;i.min="0";i.step=field==="reps"?"1":"any";
   i.value=e[field]==null?"":e[field];i.placeholder="0";i.setAttribute("aria-label",label);
-  i.oninput=()=>{
-    const raw=i.value;
-    const value=raw===""?null:Number(raw);
-    if(raw!==""&&!Number.isFinite(value)){
-      showBanner(field==="reps"?"Reps must be a positive number.":"Weight must be a positive number.",true);
-      return;
-    }
-    if(raw!==""&&value<=0){
-      showBanner(field==="reps"?"Reps must be greater than 0.":"Weight must be greater than 0.",true);
-      i.value="";
-      e[field]=null;saveEntries();persistDraftState();return;
-    }
-    const next=raw===""?null:(field==="reps"?Math.round(value):Number(value.toFixed(2)));
-    if(next!==e[field]){rememberUndo("edit set");e[field]=next;saveEntries();persistDraftState();}
-  };
-  i.onchange=()=>{
-    const raw=i.value;
-    if(raw!==""&&(!Number.isFinite(Number(raw))||Number(raw)<=0)){
-      i.value=e[field]==null?"":e[field];
-      showBanner(field==="reps"?"Reps must be greater than 0.":"Weight must be greater than 0.",true);
-    }
-  };
+  i.oninput=()=>{const v=parseFloat(i.value);e[field]=isNaN(v)?null:(field==="reps"?Math.round(v):v);saveEntries()};
   return i;
-}
-
-function undoLastAction(){
-  const snapshot=undoStack.pop();
-  if(!snapshot){showBanner("Nothing to undo yet.",false);return}
-  save(UNDO_KEY,undoStack);
-  const last=snapshot.state;
-  if(last){
-    entries=safeArray(last.entries).filter(e=>e&&typeof e=="object").map(e=>({
-      ...e,
-      name:String(e.name||"").trim(),
-      unit:e.unit==="kg"?"kg":"lb",
-      reps:Number(e.reps),
-      weight:Number(e.weight)
-    })).filter(e=>e.name&&e.date&&((Number(e.reps)>0&&Number(e.weight)>0)||e.reps==null||e.weight==null));
-    timer=last.timer&&typeof last.timer=="object"?{acc:Number(last.timer.acc)||0,start:last.timer.start||null}:{acc:0,start:null};
-    ended=last.ended&&typeof last.ended=="object"?{date:String(last.ended.date||todayKey()),ms:Number(last.ended.ms)||0}:null;
-    unit=last.unit==="kg"?"kg":"lb";
-  }
-  saveEntries(true);save(TKEY,timer);save(EKEY,ended);save(UKEY,unit);persistDraftState();drawUnit();drawTimer();render();showBanner("Undid the last change.",false);
 }
 
 /* Render */
@@ -230,7 +137,7 @@ function render(){
       const d=el("div","stat");d.appendChild(el("b","",v));d.appendChild(el("span","",l));st.appendChild(d);
     });
     const sx=$("sex");sx.textContent="";
-    gs.forEach(g=>{const r=el("div","line");r.appendChild(el("span","",g.name+" ("+g.items.length+(g.items.length===1?" set)":" sets)")));r.appendChild(el("span","vol",fmt(sum(g.items,unit))+" "+unit));sx.appendChild(r);});
+    gs.forEach(g=>{const r=el("div","line");r.appendChild(el("span","",g.name+" ("+g.items.length+(g.items.length===1?" set)":" sets)")));r.appendChild(el("span","vol",fmt(sum(g.items,unit))+" "+unit));sx.appendChild(r)});
   }
 
   drawSync();
@@ -278,14 +185,13 @@ function render(){
       g.items.forEach((e,i)=>{const s=el("div","s");s.appendChild(el("span","","Set "+(i+1)));s.appendChild(el("b","",setTxt(e)));ex.appendChild(s)});
     });
     const nSets=list.length,unsynced=list.filter(e=>!synced.has(e.id)&&e.reps>0).length;
-    ex.appendChild(confirmBtn("Delete this day","Tap again to delete "+nSets+(nSets===1?" set":" sets")+(unsynced?" ("+unsynced+" not in your sheet yet)":""),()=>deleteEntries(e=>e.date===k,what=k)));
+    ex.appendChild(confirmBtn("Delete this day","Tap again to delete "+nSets+(nSets===1?" set":" sets")+(unsynced?" ("+unsynced+" not in your sheet yet)":""),()=>deleteEntries(e=>e.date===k,label)));
     det.appendChild(ex);h.appendChild(det);
   });
   const total=entries.length,unsyncedAll=entries.filter(e=>!synced.has(e.id)&&e.reps>0).length;
   const ca=el("div","clearall");
   ca.appendChild(confirmBtn("Delete all history on this device","Tap again to delete all "+total+" sets"+(unsyncedAll?" ("+unsyncedAll+" not in your sheet yet)":""),()=>deleteEntries(()=>true,"all history")));
   h.appendChild(ca);
-  const undoBtn=$("undo");if(undoBtn){undoBtn.hidden=undoStack.length===0;undoBtn.disabled=undoStack.length===0;}
 }
 
 /* Delete history (this device only; the Google Sheet is not touched) */
@@ -300,9 +206,8 @@ function confirmBtn(label,armedLabel,onConfirm){
 function deleteEntries(match,what){
   const before=entries.length;
   const todayGone=entries.some(e=>e.date===todayKey()&&match(e));
-  rememberUndo("delete day");
   entries=entries.filter(e=>!match(e));
-  saveEntries(true);persistDraftState();
+  saveEntries(true);
   if(what==="all history"){try{Object.keys(localStorage).filter(k=>k.startsWith(DAMAGED)).forEach(k=>localStorage.removeItem(k))}catch(e){}}
   if(todayGone&&!entries.some(e=>e.date===todayKey())){ended=null;save(EKEY,null)}
   const n=before-entries.length;
@@ -361,7 +266,7 @@ async function syncSheet(opts){
       skipped+=j.rejected||0;saved+=Math.min(200,rows.length-i);
     }
     saved-=skipped;
-    if(!o.quiet)syncMsg="Saved "+saved+(saved===1?" set":" sets")+" to your Lift log sheet."+(skipped?" "+skipped+(skipped===1?" set was":" sets were")+" skipped because of invalid values (check the sheet or your entries).":"");
+    if(!o.quiet)syncMsg="Saved "+saved+(saved===1?" set":" sets")+" to your Lift log sheet."+(skipped?" "+skipped+(skipped===1?" set was":" sets were")+" skipped because of invalid values (check reps and weight).":"");
   }catch(err){if(!o.quiet){syncRetry=true;syncMsg=describe(err)+" Retrying is safe: sets already in the sheet are skipped."}}
   syncing=false;drawSync();drawHealth();
   if(rerun){rerun=false;syncSheet()}
@@ -390,15 +295,15 @@ async function askPersist(){
 function drawHealth(){
   const total=entries.length,pending=entries.filter(e=>e.reps>0&&!synced.has(e.id)).length,linked=!!(cfg.url&&cfg.token);
   $("hstat").textContent=total+(total===1?" set":" sets")+(linked?(pending?" · "+pending+" not in sheet yet":" · all in sheet"):" · sheet not connected");
-  $("hdetail").textContent="Persistent storage: "+(persisted===true?"on":persisted===false?"off (the browser may clear this data if space runs low or the app goes unused for a long time)":"unknown")+" · Last backup: "+(lastBackup?new Date(lastBackup).toLocaleString():"never");
+  $("hdetail").textContent="Persistent storage: "+(persisted===true?"on":persisted===false?"off (the browser may clear this data if space runs low or the app goes unused for a long time)":"unknown")+". Last backup file: "+(lastBackup?new Date(lastBackup).toLocaleDateString():"never")+". Backups contain your workouts only, never your token.";
   $("brest").hidden=!linked;
 }
 function backupJSON(){
-  return JSON.stringify({app:"liftlog",version:1,exported:new Date().toISOString(),entries:entries.map(e=>({id:e.id,date:e.date,name:e.name,reps:e.reps,weight:e.weight,unit:e.unit,ts:e.ts}))},null,2);
+  return JSON.stringify({app:"liftlog",version:1,exported:new Date().toISOString(),entries:entries.map(e=>({id:e.id,date:e.date,name:e.name,reps:e.reps,weight:e.weight,unit:e.unit,ts:e.ts}))},null,1);
 }
 async function deliver(file){
   try{
-    if(navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],title:"Lift log backup"});return "Shared. Keep it somewhere safe, like Files, Drive or an email thread."}
+    if(navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],title:"Lift log backup"});return "Shared. Keep it somewhere safe, like Files, Drive or an email to yourself."}
   }catch(e){if(e&&e.name==="AbortError")return ""}
   const a=document.createElement("a");a.href=URL.createObjectURL(file);a.download=file.name;document.body.appendChild(a);a.click();a.remove();
   return "Saved to your downloads.";
@@ -414,7 +319,7 @@ $("bexp").onclick=async()=>{
 function cleanEntry(o){
   if(!o||typeof o!=="object")return null;
   const id=String(o.id==null?"":o.id),date=String(o.date==null?"":o.date);
-  if(!/^[A-Za-z0-9._-]{1,64}$/.test(id) || !/^\d{4}-\d{2}-\d{2}$/.test(date))return null;
+  if(!/^[A-Za-z0-9._-]{1,64}$/.test(id)||!/^\d{4}-\d{2}-\d{2}$/.test(date)||isNaN(Date.parse(date)))return null;
   const name=String(o.name==null?"":o.name).replace(/[\u0000-\u001f\u007f]/g,"").trim();
   if(!name||name.length>60)return null;
   const num=(v,lo,hi)=>{if(v===null||v===undefined||v==="")return null;const n=typeof v==="number"?v:Number(v);return isFinite(n)&&n>=lo&&n<=hi?n:undefined};
@@ -435,7 +340,7 @@ $("impfile").onchange=async ev=>{
   if(f.size>5e6){msg.textContent="That file is too large to be a Lift log backup.";return}
   let data;try{data=JSON.parse(await f.text())}catch(e){msg.textContent="That file isn’t a Lift log backup.";return}
   if(!data||data.app!=="liftlog"||!Array.isArray(data.entries)||data.entries.length>100000){msg.textContent="That file isn’t a Lift log backup.";return}
-  const r=mergeEntries(data.entries);saveEntries();persistDraftState();render();
+  const r=mergeEntries(data.entries);saveEntries();render();
   msg.textContent="Imported "+r.added+(r.added===1?" set":" sets")+". "+r.dupes+" already on this device"+(r.bad?", "+r.bad+" skipped as invalid":"")+".";
 };
 $("brest").onclick=async()=>{
@@ -453,7 +358,7 @@ $("brest").onclick=async()=>{
       list.forEach(o=>{if(/^[A-Za-z0-9._-]{1,64}$/.test(String(o.id)))synced.add(String(o.id))}); // these are in the sheet by definition
       if(!rows.length)break;offset+=2000;
     }
-    save(SKEY,[...synced]);saveEntries();persistDraftState();render();
+    save(SKEY,[...synced]);saveEntries();render();
     msg.textContent="Restored "+r.added+(r.added===1?" set":" sets")+" from your sheet. "+r.dupes+" were already on this device"+(r.bad?", "+r.bad+" skipped":"")+".";
   }catch(err){msg.textContent=describe(err)}
 };
@@ -569,6 +474,3 @@ if(notice)showBanner(notice,false);
 askPersist();
 if(cfg.url&&cfg.token)syncSheet({pastOnly:true,quiet:true});
 window.addEventListener("online",()=>syncSheet({pastOnly:true,quiet:true}));
-$("undo").onclick=undoLastAction;
-
-persistDraftState();
