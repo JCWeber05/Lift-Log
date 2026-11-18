@@ -1,6 +1,6 @@
 // Offline support: the app shell loads from cache, and updates are picked up in the background.
-const CACHE = "liftlog-v4";
-const SHELL = ["./", "./index.html", "./app.js", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png", "./apple-touch-icon.png"];
+const CACHE = "liftlog-v7";
+const SHELL = ["./", "./index.html", "./app.js", "./view.html", "./view.js", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png", "./apple-touch-icon.png"];
 
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));

@@ -1,10 +1,34 @@
 # Lift Log changelog
 
-Current version: **1.5**. History > Data and backup shows the version your phone is running.
+Current version: **1.8**. History > Data and backup shows the version your phone is running.
 If it doesn't match, close the app fully and open it again while online.
 
 How numbers work: 1.x = new features or fixes. The "Files" line says what to upload to GitHub.
 "Script" says whether the Google Apps Script needs re-pasting (keep your own TOKEN) and a new deployment version.
+
+## 1.8 (Nov 18, 2026): Welcome screen
+- A full-screen welcome appears every time the app opens, for new and returning users alike. Flowing animated colors (they follow your accent color), a floating barbell and a shimmering title.
+- Shows your name, how many workouts you have logged and the last one. If a workout is running it says so and the button becomes "Back to workout".
+- One tap, Enter, Space or Escape gets you in. First-time users go on to the setup guide.
+- Animation turns off if your phone's "reduce motion" setting is on. Works in portrait and landscape.
+- Files: app.js, index.html, sw.js, CHANGELOG.md (sw.js changed, so you will see the "App updated" banner)
+- Script: no change
+
+## 1.7 (Nov 18, 2026): View your workouts on a computer
+- New page `view.html`: drop your backup file on it and see totals, volume per workout day, progress charts per exercise, a searchable list of every set, a lb/kg toggle and CSV download.
+- It runs only in the computer's browser and can't make network requests. Nothing is uploaded or collected.
+- History > Data and backup has **Send to my computer** (shares the backup file) and **Copy viewer link**.
+- CSV exports now defuse text that starts with = + - @ so it can't run as a formula in Excel or Sheets.
+- Files: app.js, index.html, sw.js, view.html, view.js, CHANGELOG.md (new files: view.html and view.js. sw.js changed, so you will see the "App updated" banner)
+- Script: no change
+
+## 1.6 (Nov 18, 2026): Phone-friendly setup
+- Google's script editor isn't available in the phone apps, so on a phone or tablet the guide now has two steps: do the Google part on a computer, then paste the URL on the phone.
+- "Send the script to my computer" shares (or copies) the script with your token inside, so you can email or message it to yourself.
+- "I'm on a computer right now" switches back to the full 5-step guide.
+- Setting up on a computer connects that computer only, and the guide says so.
+- Files: app.js, index.html, sw.js, CHANGELOG.md (sw.js changed, so you will see the "App updated" banner)
+- Script: no change
 
 ## 1.5 (Nov 18, 2026): Setup guide, name and color, privacy panel
 - First launch shows a welcome screen and a 5-step guide to connect Google Sheets. It is optional and can be skipped. Reopen it any time from History > Google Sheets sync > Step-by-step setup guide.

@@ -1,4 +1,4 @@
-const APP_VERSION="1.5";
+const APP_VERSION="1.8";
 const $=id=>document.getElementById(id);
 const KEY="liftlog:v1",BAK="liftlog:v1:bak",TKEY="liftlog:timer",UKEY="liftlog:unit",EKEY="liftlog:ended",BKEY="liftlog:lastbackup",DAMAGED="liftlog:damaged:";
 let storageOK=true,notice="";
@@ -334,7 +334,18 @@ $("pname").addEventListener("change",()=>setName($("pname").value));
 swatches($("psw"));
 
 const wiz=$("wiz"),wbody=$("wbody");let wstep=0;
-function openWizard(n){wstep=n;wiz.hidden=false;document.body.style.overflow="hidden";drawWizard()}
+// Google's script editor isn't in the phone apps, so on a touch device the guide hands the Google part to a computer.
+let phoneMode=false;try{phoneMode=matchMedia("(pointer:coarse)").matches}catch(e){}
+async function sendScript(msg,ta){
+  const txt=scriptText();
+  if(navigator.share){
+    try{await navigator.share({title:"Lift log script",text:txt});msg.textContent="Sent. Open it on your computer.";return}
+    catch(e){if(e&&e.name==="AbortError"){msg.textContent="";return}}
+  }
+  try{await navigator.clipboard.writeText(txt);ta.hidden=true;msg.textContent="Copied. Paste it into an email or note to yourself, then open that on your computer."}
+  catch(e){msg.textContent="Couldn’t copy automatically. Press and hold in the box below, choose Select all, then Copy, and send it to yourself.";ta.hidden=false;ta.value=txt;ta.focus();ta.select()}
+}
+function openWizard(n){if(phoneMode&&n>=1&&n<=4)n=1;wstep=n;wiz.hidden=false;document.body.style.overflow="hidden";drawWizard()}
 function closeWizard(status){
   if(status){setup.status=status;saveSetup()}
   wiz.hidden=true;document.body.style.overflow="";drawPersonal();swatches($("psw"));drawCfg();drawSync();render();window.scrollTo(0,0);
@@ -343,9 +354,9 @@ function wbtn(text,cls,fn){const b=el("button","btn"+(cls?" "+cls:""),text);b.ty
 function wlist(tag,items){const l=el(tag,"");items.forEach(t=>{const li=el("li","");if(Array.isArray(t)){t.forEach((p,i)=>{if(i%2)li.appendChild(el("b","",p));else if(p)li.appendChild(document.createTextNode(p))})}else li.textContent=t;l.appendChild(li)});return l}
 function drawWizard(){
   wbody.textContent="";
-  const head=(title,no)=>{if(no)wbody.appendChild(el("p","stepno","Step "+no+" of 5"));const h2=el("h2","",title);h2.id="wh";h2.tabIndex=-1;wbody.appendChild(h2);return h2};
+  const head=(title,no)=>{if(no)wbody.appendChild(el("p","stepno","Step "+(phoneMode&&no===5?2:no)+" of "+(phoneMode?2:5)));const h2=el("h2","",title);h2.id="wh";h2.tabIndex=-1;wbody.appendChild(h2);return h2};
   const acts=el("div","acts");
-  const back=n=>acts.appendChild(wbtn("Back","",()=>{wstep=n;drawWizard()}));
+  const back=n=>acts.appendChild(wbtn("Back","",()=>{wstep=phoneMode&&n>=1&&n<=4?1:n;drawWizard()}));
   const skip=()=>{const b=wbtn("Skip for now","link",()=>closeWizard("skipped"));acts.appendChild(b)};
   let first;
   if(wstep===0){
@@ -359,13 +370,29 @@ function drawWizard(){
     const sec=el("div","warn");sec.appendChild(el("b","","Private by design. "));sec.appendChild(document.createTextNode("No account, no tracking, no server of ours. Your workouts live on this device, and optionally in a Google Sheet in your own Google account."));wbody.appendChild(sec);
     acts.appendChild(wbtn("Next: save to Google Sheets (optional)","primary",()=>{setName(inp.value);wstep=1;drawWizard()}));
     acts.appendChild(wbtn("Skip, just start lifting","",()=>{setName(inp.value);closeWizard("skipped")}));
+  }else if(phoneMode&&wstep>=1&&wstep<=4){
+    first=head("Do this part on a computer",1);
+    wbody.appendChild(el("p","","Google doesn’t offer its script editor in the phone apps, so this part is done on a computer. It takes about five minutes."));
+    const msg=el("p","ok","");msg.setAttribute("aria-live","polite");
+    const ta=el("textarea","");ta.readOnly=true;ta.hidden=true;ta.setAttribute("aria-label","Script text");
+    wbody.appendChild(wbtn("Send the script to my computer","primary",()=>sendScript(msg,ta)));wbody.appendChild(msg);wbody.appendChild(ta);
+    wbody.appendChild(el("p","sub","The script contains your secret token, so send it only to yourself (email, notes, or a message to yourself)."));
+    wbody.appendChild(el("p","","Then, on the computer:"));
+    wbody.appendChild(wlist("ol",[
+      ["Go to ","sheets.new"," to make a new Google Sheet."],
+      ["Open ","Extensions → Apps Script",", delete what’s there, paste the script you sent yourself, and press Save."],
+      ["Click ","Deploy → New deployment",", click the gear and choose ","Web app",". Set “Execute as” to ","Me"," and “Who has access” to ","Anyone",", then Deploy."],
+      ["Click ","Authorize access"," and pick your account. If Google says it “hasn’t verified this app”, that’s normal: click Advanced, then “Go to (your project)”, then Allow."],
+      ["Copy the ","Web app URL"," and send it to yourself."]]));
+    acts.appendChild(wbtn("I have the URL","primary",()=>{wstep=5;drawWizard()}));
+    back(0);skip();
+    acts.appendChild(wbtn("I’m on a computer right now","link",()=>{phoneMode=false;wstep=1;drawWizard()}));
   }else if(wstep===1){
     first=head("Make a Google Sheet",1);
     wbody.appendChild(el("p","","Your workouts will be saved into a sheet you own. It takes about five minutes, once."));
     const a=el("a","btn primary","Open a new Google Sheet");a.href="https://sheets.new";a.target="_blank";a.rel="noopener";
     wbody.appendChild(a);
     wbody.appendChild(el("p","","Name it anything you like, for example “Lift log”. Leave it empty, the app fills it in."));
-    wbody.appendChild(el("p","sub","Tip: Google’s script editor is easiest on a computer, or in your phone browser with “Request desktop site” turned on."));
     acts.appendChild(wbtn("Next","primary",()=>{wstep=2;drawWizard()}));back(0);skip();
   }else if(wstep===2){
     first=head("Open the script editor",2);
@@ -397,7 +424,7 @@ function drawWizard(){
     acts.appendChild(wbtn("I have the URL","primary",()=>{wstep=5;drawWizard()}));back(3);skip();
   }else{
     first=head("Connect",5);
-    wbody.appendChild(el("p","","Paste the Web app URL you copied. It ends in /exec."));
+    wbody.appendChild(el("p","",phoneMode?"Paste the Web app URL you sent yourself from the computer. It ends in /exec.":"Paste the Web app URL you copied. It ends in /exec."));
     const inp=el("input","");inp.type="text";inp.setAttribute("inputmode","url");inp.autocapitalize="off";inp.autocomplete="off";inp.spellcheck=false;inp.placeholder="https://script.google.com/macros/s/…/exec";inp.setAttribute("aria-label","Web app URL");
     wbody.appendChild(inp);
     const msg=el("p","","");msg.setAttribute("aria-live","polite");wbody.appendChild(msg);
@@ -409,6 +436,7 @@ function drawWizard(){
       try{
         await post([]);save(CKEY,cfg);setup.token="";setup.status="done";saveSetup();drawCfg();drawSync();drawHealth();
         msg.className="ok";msg.textContent="Connected. Your sets will save to your sheet when you tap End workout.";
+        if(!phoneMode)wbody.insertBefore((()=>{const w=el("p","warn","This connects the device you’re using right now. To use your phone too, run this guide on your phone and use this computer only for the script steps.");return w})(),acts);
         acts.textContent="";acts.appendChild(wbtn("Start lifting","primary",()=>closeWizard("done")));
       }catch(err){
         cfg=prev;go.disabled=false;msg.className="";
@@ -427,6 +455,38 @@ function drawWizard(){
 $("cfgwiz").onclick=()=>openWizard(1);
 document.addEventListener("keydown",ev=>{if(ev.key==="Escape"&&!wiz.hidden)closeWizard("skipped")});
 function maybeWizard(){if(!setup.status&&!(cfg.url&&cfg.token)&&!entries.length)openWizard(0)}
+
+/* Welcome splash: shown every time the app opens */
+const SPLASH_COLORS={blue:["#2B4BD8","#6C3BE0","#12B5CB","#3B82F6"],green:["#1B7F4B","#0EA5A4","#65A30D","#059669"],orange:["#B85400","#D97706","#DC2626","#E11D48"],purple:["#7B3FD1","#DB2777","#4F46E5","#0891B2"],red:["#C2263A","#EA580C","#C026D3","#6D28D9"]};
+const splash=$("splash"),mainEl=document.querySelector("main");
+function drawSplash(){
+  const cols=SPLASH_COLORS[setup.accent]||SPLASH_COLORS.blue;
+  cols.forEach((c,i)=>splash.style.setProperty("--g"+(i+1),c));
+  const hr=new Date().getHours(),g=hr<12?"Good morning":hr<18?"Good afternoon":"Good evening";
+  $("sphello").textContent=setup.name?g+", "+setup.name:"Welcome";
+  const logged=entries.filter(e=>e.reps>0),days=new Set(logged.map(e=>e.date));
+  const live=!!timer.start||(timer.acc>0&&!isEnded());
+  $("sptag").textContent=live?"Workout in progress":(days.size?"Ready when you are.":"Track every set. Own every session.");
+  const st=$("spstats");st.textContent="";
+  if(live)st.appendChild(el("span","",dur(elapsed())+" on the clock"));
+  if(days.size){
+    const last=[...days].sort().pop(),items=logged.filter(e=>e.date===last);
+    st.appendChild(el("span","",days.size+(days.size===1?" workout":" workouts")+" logged"));
+    st.appendChild(el("span","","Last: "+shortDate(last)+" · "+volLabel(items)));
+  }
+  $("splashgo").textContent=live?"Back to workout":(days.size?"Start lifting":"Get started");
+  mainEl.inert=true;mainEl.setAttribute("aria-hidden","true");document.body.style.overflow="hidden";
+  $("splashgo").focus({preventScroll:true});
+}
+function dismissSplash(){
+  if(splash.dataset.done)return;splash.dataset.done="1";
+  mainEl.inert=false;mainEl.removeAttribute("aria-hidden");
+  splash.classList.add("out");document.body.style.overflow=wiz.hidden?"":"hidden";
+  setTimeout(()=>{splash.hidden=true},500);
+  const next=wiz.hidden?$("tgl"):document.getElementById("wh");if(next)next.focus({preventScroll:true});
+}
+splash.addEventListener("click",dismissSplash);
+document.addEventListener("keydown",ev=>{if(!splash.dataset.done&&!splash.hidden&&(ev.key==="Enter"||ev.key===" "||ev.key==="Escape")){ev.preventDefault();ev.stopImmediatePropagation();dismissSplash()}},true);
 
 /* Data health, backup, import and restore */
 let persisted=null,lastBackup=load(BKEY,0);
@@ -448,19 +508,28 @@ function drawHealth(){
 function backupJSON(){
   return JSON.stringify({app:"liftlog",version:1,exported:new Date().toISOString(),entries:entries.map(e=>({id:e.id,date:e.date,name:e.name,reps:e.reps,weight:e.weight,unit:e.unit,ts:e.ts,...(e.bw?{bw:true}:{})}))},null,1);
 }
-async function deliver(file){
+async function deliver(file,sharedMsg){
   try{
-    if(navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],title:"Lift log backup"});return "Shared. Keep it somewhere safe, like Files, Drive or an email to yourself."}
+    if(navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],title:"Lift log backup"});return sharedMsg||"Shared. Keep it somewhere safe, like Files, Drive or an email to yourself."}
   }catch(e){if(e&&e.name==="AbortError")return ""}
   const a=document.createElement("a");a.href=URL.createObjectURL(file);a.download=file.name;document.body.appendChild(a);a.click();a.remove();
   return "Saved to your downloads.";
 }
-$("bexp").onclick=async()=>{
+async function sendBackup(sharedMsg){
   if(!entries.length){$("hmsg").textContent="Nothing to back up yet.";return}
   const file=new File([backupJSON()],"lift-log-backup-"+todayKey()+".json",{type:"application/json"});
-  const m=await deliver(file);
+  const m=await deliver(file,sharedMsg);
   if(m){lastBackup=Date.now();save(BKEY,lastBackup);drawHealth()}
   $("hmsg").textContent=m;
+}
+$("bexp").onclick=()=>sendBackup();
+// The viewer page lives next to the app. The file goes from your phone to your computer by whatever route you choose; nothing is uploaded by the app.
+const viewerURL=(()=>{try{return new URL("view.html",location.href).href}catch(e){return "view.html"}})();
+$("vurl").textContent=viewerURL;
+$("bsend").onclick=()=>sendBackup("Sent. On your computer, open the viewer page and drop this file on it.");
+$("bcopyv").onclick=async()=>{
+  try{await navigator.clipboard.writeText(viewerURL);$("hmsg").textContent="Viewer link copied. Open it on your computer."}
+  catch(e){$("hmsg").textContent="Couldn’t copy automatically. The link is shown above."}
 };
 // Only known fields are accepted, with strict types and ranges, so a bad file can't put anything odd in your history.
 function cleanEntry(o){
@@ -594,7 +663,7 @@ async function shareWorkout(){
 $("sharebtn").onclick=shareWorkout;
 
 function csv(){
-  const q=v=>{v=String(v);return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v};
+  const q=v=>{v=String(v);if(/^[=+\-@\t\r]/.test(v))v="'"+v;return /[",\n\r]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v};
   const rows=[["Date","Exercise","Set","Reps","Weight","Unit","Volume"]],cnt={};
   entries.slice().sort((a,b)=>a.date===b.date?a.ts-b.ts:(a.date<b.date?-1:1)).forEach(e=>{
     const k=e.date+"|"+e.name.toLowerCase();cnt[k]=(cnt[k]||0)+1;
@@ -619,7 +688,7 @@ if("serviceWorker" in navigator&&location.protocol.startsWith("http")){
   window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));
 }
 
-drawPersonal();drawUnit();drawTimer();drawCfg();render();maybeWizard();
+drawPersonal();drawUnit();drawTimer();drawCfg();render();maybeWizard();drawSplash();
 if(notice)showBanner(notice,false);
 askPersist();
 if(cfg.url&&cfg.token)syncSheet({pastOnly:true,quiet:true});
