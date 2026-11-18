@@ -1,4 +1,4 @@
-const APP_VERSION="1.4";
+const APP_VERSION="1.5";
 const $=id=>document.getElementById(id);
 const KEY="liftlog:v1",BAK="liftlog:v1:bak",TKEY="liftlog:timer",UKEY="liftlog:unit",EKEY="liftlog:ended",BKEY="liftlog:lastbackup",DAMAGED="liftlog:damaged:";
 let storageOK=true,notice="";
@@ -292,6 +292,142 @@ $("cfgsave").onclick=async()=>{
   catch(err){$("cfgmsg").textContent=describe(err)}
 };
 
+/* Personalization and first-run setup guide */
+const SCRIPT_TEMPLATE="// Lift log: receives workouts from the app and adds them to the \"Log\" tab of this spreadsheet.\n// Each workout gets its own banner row (date, workout number, exercises, sets, total volume, minutes)\n// with a blank row between workouts. Set rows stay one per set, so you can still filter and sort.\n//\n// Setup: the secret token below was made for you by the app. Deploy this as a web app (the app's guide shows how).\n// Keep the token private: anyone who has it and your web app URL can add rows to this sheet.\n// Tidy up existing rows: run reformatLog() once from the Apps Script editor.\n\nconst TOKEN = \"CHANGE-THIS-TO-A-LONG-RANDOM-STRING\";\nconst TAB = \"Log\";\n// Columns A-H are the readable ones. I (Set ID) is used to skip duplicates and is hidden. J labels the workout.\nconst HEADER = [\"Date\", \"Exercise\", \"Set\", \"Reps\", \"Weight\", \"Unit\", \"Volume\", \"Workout minutes\", \"Set ID\", \"Workout\"];\nconst COLS = HEADER.length;\nconst BANNER_BG = \"#2B4BD8\";\nconst BANNER_FG = \"#FFFFFF\";\nconst MAX_BODY = 100000; // bytes of request body\nconst MAX_ROWS = 500;    // sets per request\n\nfunction doGet() {\n  return reply({ ok: false, error: \"post_only\" });\n}\n\nfunction doPost(e) {\n  const lock = LockService.getScriptLock();\n  try {\n    if (TOKEN === \"CHANGE-THIS-TO-A-LONG-RANDOM-STRING\" || String(TOKEN).length < 24) {\n      return reply({ ok: false, error: \"token_not_set\" });\n    }\n    const raw = e && e.postData && e.postData.contents;\n    if (typeof raw !== \"string\" || raw.length > MAX_BODY) return reply({ ok: false, error: \"bad_request\" });\n    let data;\n    try { data = JSON.parse(raw); } catch (_) { return reply({ ok: false, error: \"bad_request\" }); }\n    if (!data || typeof data !== \"object\" || !safeEqual(data.token, TOKEN)) {\n      return reply({ ok: false, error: \"bad_token\" });\n    }\n    // Read-only: lets the app restore its history from this sheet (same token required).\n    if (data.action === \"export\") return reply(exportRows(data.offset, data.limit));\n    if (data.rows !== undefined && !Array.isArray(data.rows)) return reply({ ok: false, error: \"bad_request\" });\n    const input = data.rows || [];\n    if (input.length > MAX_ROWS) return reply({ ok: false, error: \"too_many_rows\" });\n\n    // Keep only well-formed sets; count the rest so the app can tell you.\n    const rows = [];\n    let rejected = 0;\n    input.forEach(r => {\n      const clean = cleanRow(r);\n      if (clean) rows.push(clean); else rejected++;\n    });\n\n    lock.waitLock(20000);\n    const ss = SpreadsheetApp.getActiveSpreadsheet();\n    const sheet = ss.getSheetByName(TAB) || ss.insertSheet(TAB);\n    ensureHeader(sheet);\n    if (!rows.length) return reply({ ok: true, added: 0, rejected, sheetUrl: ss.getUrl() });\n\n    // Skip sets that are already in the sheet, so retrying never creates duplicates.\n    const last = sheet.getLastRow();\n    const have = new Set(last > 1 ? sheet.getRange(2, 9, last - 1, 1).getValues().map(r => String(r[0])) : []);\n    const fresh = rows.filter(r => !have.has(String(r[8])));\n\n    if (fresh.length) {\n      const tz = ss.getSpreadsheetTimeZone();\n      const counts = workoutsPerDate(sheet, tz);\n      const byDate = {};\n      const dates = [];\n      fresh.forEach(r => {\n        const d = r[0];\n        if (!byDate[d]) { byDate[d] = []; dates.push(d); }\n        byDate[d].push(r);\n      });\n      const hasRows = last > 1;\n      const blocks = dates.map((d, i) => {\n        counts[d] = (counts[d] || 0) + 1;\n        return makeBlock(d, counts[d], byDate[d], hasRows || i > 0, tz);\n      });\n      writeBlocks(sheet, blocks);\n    }\n    return reply({ ok: true, added: fresh.length, rejected, sheetUrl: ss.getUrl() });\n  } catch (err) {\n    console.error(err); // details stay in the script's execution log, not in the response\n    return reply({ ok: false, error: \"server_error\" });\n  } finally {\n    try { lock.releaseLock(); } catch (_) {}\n  }\n}\n\n// Returns saved sets (rows that have a Set ID) in pages, for the app's \"Restore from sheet\" button.\nfunction exportRows(offset, limit) {\n  const ss = SpreadsheetApp.getActiveSpreadsheet();\n  const sheet = ss.getSheetByName(TAB);\n  const start = intIn(offset, 0, 10000000) || 0;\n  const size = intIn(limit, 1, 2000) || 2000;\n  if (!sheet || sheet.getLastRow() < 2) return { ok: true, total: 0, rows: [] };\n  const tz = ss.getSpreadsheetTimeZone();\n  const vals = sheet.getRange(2, 1, sheet.getLastRow() - 1, 9).getValues();\n  const data = vals\n    .filter(r => String(r[1]).trim() !== \"\" && String(r[8]).trim() !== \"\")\n    .map(r => [dateText(r[0], tz), String(r[1]), r[2], r[3], r[4], String(r[5]), r[6], r[7], String(r[8])]);\n  return { ok: true, total: data.length, rows: data.slice(start, start + size) };\n}\n\n// Run this once from the editor to give existing rows the banner layout.\n// It keeps a copy of the old tab (\"Log backup ...\") that you can delete when you're happy.\nfunction reformatLog() {\n  const ss = SpreadsheetApp.getActiveSpreadsheet();\n  const sheet = ss.getSheetByName(TAB);\n  if (!sheet) throw new Error('No \"' + TAB + '\" tab found.');\n  const tz = ss.getSpreadsheetTimeZone();\n  ensureHeader(sheet);\n  const last = sheet.getLastRow();\n  if (last < 2) return;\n\n  const values = sheet.getRange(2, 1, last - 1, COLS).getValues();\n  const data = [];\n  values.forEach((r, i) => {\n    if (String(r[1]).trim() === \"\") return; // banner and blank rows have no exercise name\n    const row = r.slice();\n    row[0] = dateText(row[0], tz);\n    data.push({ row, i });\n  });\n  data.sort((a, b) => (a.row[0] < b.row[0] ? -1 : a.row[0] > b.row[0] ? 1 : a.i - b.i));\n\n  const groups = [];\n  const perDate = {};\n  let cur = null;\n  data.forEach(({ row }) => {\n    const key = row[9] ? String(row[9]) : row[0];\n    if (!cur || cur.key !== key) {\n      perDate[row[0]] = (perDate[row[0]] || 0) + 1;\n      cur = { key, d: row[0], n: perDate[row[0]], rows: [] };\n      groups.push(cur);\n    }\n    cur.rows.push(row);\n  });\n  const blocks = groups.map((g, i) => makeBlock(g.d, g.n, g.rows, i > 0, tz));\n\n  sheet.copyTo(ss).setName(\"Log backup \" + Utilities.formatDate(new Date(), tz, \"yyyy-MM-dd HH-mm\"));\n  sheet.getRange(2, 1, Math.max(sheet.getMaxRows() - 1, 1), COLS).clear();\n  writeBlocks(sheet, blocks);\n}\n\n// ---- validation and safety ----\n\n// Compares two strings without stopping at the first difference.\nfunction safeEqual(a, b) {\n  const x = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(a));\n  const y = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(b));\n  let diff = x.length ^ y.length;\n  for (let i = 0; i < x.length; i++) diff |= x[i] ^ y[i];\n  return diff === 0;\n}\n\n// Returns a cleaned 9-value row, or null if anything is off.\nfunction cleanRow(r) {\n  if (!Array.isArray(r) || r.length < 9 || r.length > 12) return null;\n  const date = String(r[0]);\n  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(date) || isNaN(Date.parse(date))) return null;\n  const name = cleanText(r[1], 60);\n  const set = intIn(r[2], 1, 100);\n  const reps = intIn(r[3], 1, 1000);\n  const weight = r[4] === \"\" || r[4] === null ? \"\" : numIn(r[4], 0, 5000);\n  const unit = String(r[5]);\n  const volume = numIn(r[6], 0, 5000000);\n  const mins = r[7] === \"\" || r[7] === null || r[7] === undefined ? \"\" : numIn(r[7], 0, 1440);\n  const id = String(r[8]);\n  if (!name || set === null || reps === null || weight === null || volume === null || mins === null) return null;\n  if (unit !== \"lb\" && unit !== \"kg\") return null;\n  if (!/^[A-Za-z0-9._-]{1,64}$/.test(id)) return null;\n  return [date, name, set, reps, weight, unit, volume, mins, id];\n}\n\nfunction cleanText(v, max) {\n  const t = String(v).replace(/[\\u0000-\\u001f\\u007f]/g, \"\").trim();\n  return t && t.length <= max ? t : null;\n}\n\nfunction numIn(v, lo, hi) {\n  const n = typeof v === \"number\" ? v : (typeof v === \"string\" && v.trim() !== \"\" ? Number(v) : NaN);\n  return isFinite(n) && n >= lo && n <= hi ? n : null;\n}\n\nfunction intIn(v, lo, hi) {\n  const n = numIn(v, lo, hi);\n  return n !== null && Math.floor(n) === n ? n : null;\n}\n\n// ---- helpers ----\n\nfunction makeBlock(d, n, setRows, withSpacer, tz) {\n  const label = d + \" #\" + n;\n  const rows = [];\n  if (withSpacer) rows.push(new Array(COLS).fill(\"\"));\n  const bannerIdx = rows.length;\n  const banner = new Array(COLS).fill(\"\");\n  banner[0] = bannerText(d, n, setRows, tz);\n  rows.push(banner);\n  setRows.forEach(r => {\n    const out = [];\n    for (let i = 0; i < 9; i++) out.push(r[i] === undefined || r[i] === null ? \"\" : r[i]);\n    out[0] = d;\n    out.push(label);\n    rows.push(out);\n  });\n  return { rows, bannerIdx };\n}\n\nfunction writeBlocks(sheet, blocks) {\n  const start = Math.max(sheet.getLastRow(), 1) + 1;\n  const values = [];\n  const bannerRows = [];\n  blocks.forEach(b => {\n    bannerRows.push(start + values.length + b.bannerIdx);\n    b.rows.forEach(r => values.push(r));\n  });\n  const area = sheet.getRange(start, 1, values.length, COLS);\n  area.setBackground(null).setFontColor(null).setFontWeight(\"normal\");\n  // Plain-text format on the text columns, so a value like \"=1+1\" is stored as text and never runs as a formula.\n  [1, 2, 6, 9, 10].forEach(c => sheet.getRange(start, c, values.length, 1).setNumberFormat(\"@\"));\n  area.setValues(values);\n  bannerRows.forEach(r => {\n    sheet.getRange(r, 1, 1, COLS).setBackground(BANNER_BG).setFontColor(BANNER_FG).setFontWeight(\"bold\");\n  });\n}\n\nfunction bannerText(d, n, setRows, tz) {\n  const [y, m, day] = d.split(\"-\").map(Number);\n  const pretty = Utilities.formatDate(new Date(y, m - 1, day, 12), tz, \"EEE, MMM d, yyyy\");\n  const names = {};\n  const totals = {};\n  let mins = \"\";\n  setRows.forEach(r => {\n    names[String(r[1]).toLowerCase()] = true;\n    const unit = r[5] || \"\";\n    totals[unit] = (totals[unit] || 0) + (Number(r[6]) || 0);\n    if (mins === \"\" && r[7] !== \"\" && r[7] !== undefined && r[7] !== null) mins = Number(r[7]);\n  });\n  const ex = Object.keys(names).length;\n  const vol = Object.keys(totals).map(u => commas(Math.round(totals[u])) + \" \" + u).join(\" + \");\n  const parts = [pretty, \"Workout \" + n, ex + (ex === 1 ? \" exercise\" : \" exercises\"), setRows.length + (setRows.length === 1 ? \" set\" : \" sets\"), vol];\n  if (mins !== \"\" && !isNaN(mins)) parts.push(mins + \" min\");\n  return parts.join(\"  \u00b7  \");\n}\n\nfunction workoutsPerDate(sheet, tz) {\n  const last = sheet.getLastRow();\n  const counts = {};\n  if (last < 2) return counts;\n  const vals = sheet.getRange(2, 1, last - 1, COLS).getValues();\n  const seen = {};\n  vals.forEach(r => {\n    if (String(r[1]).trim() === \"\") return;\n    const d = dateText(r[0], tz);\n    const key = d + \"|\" + (r[9] ? String(r[9]) : \"older\");\n    if (!seen[key]) { seen[key] = true; counts[d] = (counts[d] || 0) + 1; }\n  });\n  return counts;\n}\n\nfunction dateText(v, tz) {\n  if (Object.prototype.toString.call(v) === \"[object Date]\") return Utilities.formatDate(v, tz, \"yyyy-MM-dd\");\n  return String(v);\n}\n\nfunction commas(n) {\n  return String(n).replace(/\\B(?=(\\d{3})+(?!\\d))/g, \",\");\n}\n\nfunction ensureHeader(sheet) {\n  const current = sheet.getRange(1, 1, 1, COLS).getValues()[0];\n  if (current.join(\"|\") !== HEADER.join(\"|\")) {\n    sheet.getRange(1, 1, 1, COLS).setValues([HEADER]).setFontWeight(\"bold\");\n    sheet.setFrozenRows(1);\n  }\n  if (!sheet.isColumnHiddenByUser(9)) sheet.hideColumns(9);\n}\n\nfunction reply(obj) {\n  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);\n}\n";
+const SETKEY="liftlog:setup";
+const ACCENTS={blue:["#2B4BD8","Blue"],green:["#1B7F4B","Green"],orange:["#B85400","Orange"],purple:["#7B3FD1","Purple"],red:["#C2263A","Red"]};
+let setup=load(SETKEY,null);if(!setup||typeof setup!=="object")setup={};
+setup={status:setup.status==="skipped"||setup.status==="done"?setup.status:"",
+  name:typeof setup.name==="string"?setup.name.replace(/[\u0000-\u001f\u007f]/g,"").slice(0,30):"",
+  accent:Object.prototype.hasOwnProperty.call(ACCENTS,setup.accent)?setup.accent:"blue",
+  token:/^[A-Za-z0-9]{24,64}$/.test(setup.token||"")?setup.token:""};
+const saveSetup=()=>save(SETKEY,setup);
+function makeToken(){ // 40 random letters and digits from the browser's secure random source
+  const a="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789",buf=new Uint8Array(64);let t="";
+  while(t.length<40){crypto.getRandomValues(buf);for(const b of buf){if(b<248&&t.length<40)t+=a[b%62]}}
+  return t;
+}
+function scriptText(){
+  if(!setup.token){setup.token=makeToken();saveSetup()} // kept until connected, so re-copying always matches
+  return SCRIPT_TEMPLATE.replace('const TOKEN = "CHANGE-THIS-TO-A-LONG-RANDOM-STRING";',()=>'const TOKEN = "'+setup.token+'";');
+}
+function drawPersonal(){
+  document.documentElement.dataset.accent=setup.accent;
+  const hr=new Date().getHours(),g=hr<12?"Good morning":hr<18?"Good afternoon":"Good evening",hi=$("hello");
+  hi.hidden=!setup.name;hi.textContent=setup.name?g+", "+setup.name:"";
+  $("persstat").textContent=(setup.name||"No name set")+" · "+ACCENTS[setup.accent][1];
+  if($("pname").value!==setup.name&&document.activeElement!==$("pname"))$("pname").value=setup.name;
+}
+function setName(v){setup.name=v.replace(/[\u0000-\u001f\u007f]/g,"").trim().slice(0,30);saveSetup();drawPersonal()}
+function swatches(box){
+  box.textContent="";
+  Object.keys(ACCENTS).forEach(k=>{
+    const b=el("button","");b.type="button";b.style.background=ACCENTS[k][0];
+    b.setAttribute("aria-label",ACCENTS[k][1]);b.setAttribute("aria-pressed",k===setup.accent);
+    b.onclick=()=>{setup.accent=k;saveSetup();drawPersonal();swatches(box)};
+    box.appendChild(b);
+  });
+}
+$("pname").addEventListener("input",()=>{setup.name=$("pname").value.replace(/[\u0000-\u001f\u007f]/g,"").slice(0,30);saveSetup();
+  const hi=$("hello");hi.hidden=!setup.name.trim();hi.textContent=setup.name.trim()?"Hello, "+setup.name.trim():""});
+$("pname").addEventListener("change",()=>setName($("pname").value));
+swatches($("psw"));
+
+const wiz=$("wiz"),wbody=$("wbody");let wstep=0;
+function openWizard(n){wstep=n;wiz.hidden=false;document.body.style.overflow="hidden";drawWizard()}
+function closeWizard(status){
+  if(status){setup.status=status;saveSetup()}
+  wiz.hidden=true;document.body.style.overflow="";drawPersonal();swatches($("psw"));drawCfg();drawSync();render();window.scrollTo(0,0);
+}
+function wbtn(text,cls,fn){const b=el("button","btn"+(cls?" "+cls:""),text);b.type="button";b.onclick=fn;return b}
+function wlist(tag,items){const l=el(tag,"");items.forEach(t=>{const li=el("li","");if(Array.isArray(t)){t.forEach((p,i)=>{if(i%2)li.appendChild(el("b","",p));else if(p)li.appendChild(document.createTextNode(p))})}else li.textContent=t;l.appendChild(li)});return l}
+function drawWizard(){
+  wbody.textContent="";
+  const head=(title,no)=>{if(no)wbody.appendChild(el("p","stepno","Step "+no+" of 5"));const h2=el("h2","",title);h2.id="wh";h2.tabIndex=-1;wbody.appendChild(h2);return h2};
+  const acts=el("div","acts");
+  const back=n=>acts.appendChild(wbtn("Back","",()=>{wstep=n;drawWizard()}));
+  const skip=()=>{const b=wbtn("Skip for now","link",()=>closeWizard("skipped"));acts.appendChild(b)};
+  let first;
+  if(wstep===0){
+    first=head("Welcome to Lift log");
+    wbody.appendChild(el("p","","Log your sets, time your workout and see your total volume. Everything stays on your phone."));
+    const lab=el("label","","What should we call you? (optional)");lab.htmlFor="wname";wbody.appendChild(lab);
+    const inp=el("input","");inp.type="text";inp.id="wname";inp.maxLength=30;inp.autocomplete="given-name";inp.value=setup.name;
+    inp.oninput=()=>{setup.name=inp.value.replace(/[\u0000-\u001f\u007f]/g,"").slice(0,30);saveSetup()};
+    wbody.appendChild(inp);
+    wbody.appendChild(el("p","sub","Pick a color"));const sw=el("div","sw");sw.setAttribute("role","group");sw.setAttribute("aria-label","Accent color");wbody.appendChild(sw);swatches(sw);
+    const sec=el("div","warn");sec.appendChild(el("b","","Private by design. "));sec.appendChild(document.createTextNode("No account, no tracking, no server of ours. Your workouts live on this device, and optionally in a Google Sheet in your own Google account."));wbody.appendChild(sec);
+    acts.appendChild(wbtn("Next: save to Google Sheets (optional)","primary",()=>{setName(inp.value);wstep=1;drawWizard()}));
+    acts.appendChild(wbtn("Skip, just start lifting","",()=>{setName(inp.value);closeWizard("skipped")}));
+  }else if(wstep===1){
+    first=head("Make a Google Sheet",1);
+    wbody.appendChild(el("p","","Your workouts will be saved into a sheet you own. It takes about five minutes, once."));
+    const a=el("a","btn primary","Open a new Google Sheet");a.href="https://sheets.new";a.target="_blank";a.rel="noopener";
+    wbody.appendChild(a);
+    wbody.appendChild(el("p","","Name it anything you like, for example “Lift log”. Leave it empty, the app fills it in."));
+    wbody.appendChild(el("p","sub","Tip: Google’s script editor is easiest on a computer, or in your phone browser with “Request desktop site” turned on."));
+    acts.appendChild(wbtn("Next","primary",()=>{wstep=2;drawWizard()}));back(0);skip();
+  }else if(wstep===2){
+    first=head("Open the script editor",2);
+    wbody.appendChild(wlist("ol",[["In your new sheet, open the ","Extensions"," menu, then tap ","Apps Script"],"A code editor opens. Select everything in it and delete it so it’s empty."]));
+    acts.appendChild(wbtn("Next","primary",()=>{wstep=3;drawWizard()}));back(1);skip();
+  }else if(wstep===3){
+    first=head("Copy and paste the script",3);
+    wbody.appendChild(el("p","","Tap the button, then paste into the empty editor and press Save (the disk icon). Your own secret token is already inside the script."));
+    const msg=el("p","ok","");msg.setAttribute("aria-live","polite");
+    const copy=wbtn("Copy script","primary",async()=>{
+      const txt=scriptText();
+      try{await navigator.clipboard.writeText(txt);msg.textContent="Copied. Paste it into the editor.";ta.hidden=true}
+      catch(e){msg.textContent="Couldn’t copy automatically. Press and hold in the box below, choose Select all, then Copy.";ta.hidden=false;ta.value=txt;ta.focus();ta.select()}
+    });
+    wbody.appendChild(copy);wbody.appendChild(msg);
+    const ta=el("textarea","");ta.readOnly=true;ta.hidden=true;ta.setAttribute("aria-label","Script text");wbody.appendChild(ta);
+    acts.appendChild(wbtn("Next","primary",()=>{wstep=4;drawWizard()}));back(2);skip();
+  }else if(wstep===4){
+    first=head("Deploy it",4);
+    wbody.appendChild(wlist("ol",[
+      ["Tap ","Deploy"," (top right), then ","New deployment","."],
+      ["Tap the gear next to “Select type” and choose ","Web app","."],
+      ["Set “Execute as” to ","Me"," and “Who has access” to ","Anyone","."],
+      ["Tap ","Deploy",", then ","Authorize access"," and pick your Google account."],
+      ["Copy the ","Web app URL","."]]));
+    const w=el("div","warn");w.appendChild(el("b","","Google will say “hasn’t verified this app”. "));
+    w.appendChild(document.createTextNode("That’s normal: the script is your own, running in your own account. Tap Advanced, then “Go to (your project name)”, then Allow."));wbody.appendChild(w);
+    wbody.appendChild(el("p","sub","“Anyone” only means the address works from your phone. Nothing is saved unless the request has your secret token."));
+    acts.appendChild(wbtn("I have the URL","primary",()=>{wstep=5;drawWizard()}));back(3);skip();
+  }else{
+    first=head("Connect",5);
+    wbody.appendChild(el("p","","Paste the Web app URL you copied. It ends in /exec."));
+    const inp=el("input","");inp.type="text";inp.setAttribute("inputmode","url");inp.autocapitalize="off";inp.autocomplete="off";inp.spellcheck=false;inp.placeholder="https://script.google.com/macros/s/…/exec";inp.setAttribute("aria-label","Web app URL");
+    wbody.appendChild(inp);
+    const msg=el("p","","");msg.setAttribute("aria-live","polite");wbody.appendChild(msg);
+    const go=wbtn("Test and connect","primary",async()=>{
+      const url=inp.value.trim();
+      if(!/^https:\/\/script\.google\.com\/.+\/exec/.test(url)){msg.textContent="That doesn’t look like the Web app URL. It starts with https://script.google.com and ends with /exec.";return}
+      if(!setup.token){msg.textContent="Go back to “Copy and paste the script” first, so the script and the app share a secret.";return}
+      const prev={...cfg};cfg.url=url;cfg.token=setup.token;go.disabled=true;msg.className="";msg.textContent="Testing…";
+      try{
+        await post([]);save(CKEY,cfg);setup.token="";setup.status="done";saveSetup();drawCfg();drawSync();drawHealth();
+        msg.className="ok";msg.textContent="Connected. Your sets will save to your sheet when you tap End workout.";
+        acts.textContent="";acts.appendChild(wbtn("Start lifting","primary",()=>closeWizard("done")));
+      }catch(err){
+        cfg=prev;go.disabled=false;msg.className="";
+        const c=err&&err.code;
+        msg.textContent=c==="bad_token"?"The script is reachable, but its secret doesn’t match this app. Go back one step, copy the script again, replace everything in the editor, save, then Deploy → Manage deployments → pencil → Version: New version → Deploy."
+          :c==="bad_response"?"That address didn’t answer like your script. Check that you copied the Web app URL (ends in /exec) and that “Who has access” is Anyone."
+          :c==="script_error"?describe(err)
+          :"Couldn’t reach it. Check your connection, and that “Who has access” is set to Anyone.";
+      }
+    });
+    acts.appendChild(go);back(4);skip();
+  }
+  wbody.appendChild(acts);
+  if(first)first.focus({preventScroll:true});wiz.scrollTop=0;
+}
+$("cfgwiz").onclick=()=>openWizard(1);
+document.addEventListener("keydown",ev=>{if(ev.key==="Escape"&&!wiz.hidden)closeWizard("skipped")});
+function maybeWizard(){if(!setup.status&&!(cfg.url&&cfg.token)&&!entries.length)openWizard(0)}
+
 /* Data health, backup, import and restore */
 let persisted=null,lastBackup=load(BKEY,0);
 async function askPersist(){
@@ -407,7 +543,7 @@ function workoutText(){
 }
 function drawCard(){
   const td=todaySets(),gs=groups(td),[y,m,d]=todayKey().split("-").map(Number);
-  const W=1080,P=72,INK="#151A22",MUTED="#5F6B7A",ACC="#2B4BD8";
+  const W=1080,P=72,INK="#151A22",MUTED="#5F6B7A",ACC=(ACCENTS[setup.accent]||ACCENTS.blue)[0];
   const cond=(w,s)=>w+" "+s+"px 'Barlow Condensed','Arial Narrow',sans-serif";
   const body=(w,s)=>w+" "+s+"px Barlow,system-ui,-apple-system,'Segoe UI',sans-serif";
   const c=document.createElement("canvas"),x=c.getContext("2d");
@@ -483,7 +619,7 @@ if("serviceWorker" in navigator&&location.protocol.startsWith("http")){
   window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));
 }
 
-drawUnit();drawTimer();drawCfg();render();
+drawPersonal();drawUnit();drawTimer();drawCfg();render();maybeWizard();
 if(notice)showBanner(notice,false);
 askPersist();
 if(cfg.url&&cfg.token)syncSheet({pastOnly:true,quiet:true});

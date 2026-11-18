@@ -1,5 +1,7 @@
 # Lift log: setup (about 15 minutes, one time)
 
+New in 1.5: the app walks you through this itself the first time you open it (or any time from History > Google Sheets sync > Step-by-step setup guide). The steps below are the same thing in writing.
+
 You'll do three things: connect the app to your Google Sheet, put the app online, and install it on your phone.
 
 ## 1. Connect your Google Sheet
