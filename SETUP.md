@@ -58,6 +58,14 @@ The first time you connect, any sets already logged on your phone are also sent 
 
 ## Updating the app later
 
-Re-upload the changed files to the same repository. The app picks up updates the next time it's opened with a connection.
+Upload the changed files to the same GitHub repository (Add file > Upload files, same names, then Commit). That is the whole update. Don't delete the repository or change its name, or the app's address changes.
+
+Every release has a number (see CHANGELOG.md for what changed in each and which files to upload). Your phone shows its version in History > Data and backup.
+
+Which files change: usually `app.js` and `index.html`, plus `sw.js` when the version number inside it goes up. A new release will say which ones.
+
+On your phone: open the app once while online, close it fully, and open it again. The second launch runs the new version. History > Data and backup shows "App version" so you can confirm. A banner also says "App updated" when a new version has arrived.
+
+Your workouts and your sheet connection are kept. Updating never clears them.
 
 Your workout data lives in your phone's browser storage. Clearing the site data for the app erases it, so the sheet is your permanent record.

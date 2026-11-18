@@ -1,3 +1,4 @@
+const APP_VERSION="1.4";
 const $=id=>document.getElementById(id);
 const KEY="liftlog:v1",BAK="liftlog:v1:bak",TKEY="liftlog:timer",UKEY="liftlog:unit",EKEY="liftlog:ended",BKEY="liftlog:lastbackup",DAMAGED="liftlog:damaged:";
 let storageOK=true,notice="";
@@ -44,7 +45,7 @@ let raw=readEntries();
 // each entry is one set; older entries logged as "N sets" are split into single sets
 let entries=raw.filter(e=>e&&typeof e==="object").flatMap(e=>{
   const n=e.sets>1?e.sets:1;
-  return Array.from({length:n},(_,i)=>({id:n>1?e.id+"-"+i:e.id,date:e.date,name:e.name,reps:e.reps,weight:e.weight,unit:e.unit||"lb",ts:(e.ts||0)+i}));
+  return Array.from({length:n},(_,i)=>({id:n>1?e.id+"-"+i:e.id,date:e.date,name:e.name,reps:e.reps,weight:e.weight,unit:e.unit||"lb",ts:(e.ts||0)+i,...(e.bw===true?{bw:true}:{})}));
 });
 saveEntries();
 let unit=load(UKEY,"lb"),timer=load(TKEY,{acc:0,start:null}),ended=load(EKEY,null);
@@ -59,7 +60,11 @@ const vol=(e,u)=>e.reps*conv(e,u);
 const sum=(l,u)=>l.reduce((a,e)=>a+vol(e,u),0);
 function el(tag,cls,text){const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=text;return n}
 function groups(list){const g={};list.forEach(e=>{const k=e.name.toLowerCase();(g[k]=g[k]||{name:e.name,items:[]}).items.push(e)});return Object.values(g)}
-const setTxt=e=>(e.reps||0)+" × "+wfmt(e.weight||0)+" "+e.unit;
+// Bodyweight sets show "BW"; any weight entered is extra weight added on top (vest, belt, dumbbell).
+const wTxt=e=>e.bw?(e.weight>0?"BW + "+wfmt(e.weight)+" "+e.unit:"BW"):wfmt(e.weight||0)+" "+e.unit;
+const setTxt=e=>(e.reps||0)+" × "+wTxt(e);
+// Volume label: bodyweight work with no added weight has no volume, so show total reps instead.
+const volLabel=items=>{const v=sum(items,unit);return v===0&&items.some(e=>e.bw)?items.reduce((a,e)=>a+(e.reps||0),0)+" reps":fmt(v)+" "+unit};
 
 /* Timer */
 const dur=ms=>{const s=Math.floor(ms/1000),h=Math.floor(s/3600),m=Math.floor(s%3600/60);return (h?h+":"+pad(m):pad(m))+":"+pad(s%60)};
@@ -95,13 +100,13 @@ function showTab(t){
   $("t-today").setAttribute("aria-selected",!h);$("t-hist").setAttribute("aria-selected",h);
 }
 $("t-today").onclick=()=>showTab("today");
-$("t-hist").onclick=()=>showTab("hist");
+$("t-hist").onclick=()=>{render();showTab("hist")};
 
 /* Form */
 function addSet(name,src){
   const last=src||entries.filter(e=>e.name.toLowerCase()===name.toLowerCase()).sort((a,b)=>b.ts-a.ts)[0];
   entries.push({id:Date.now()+Math.random().toString(36).slice(2,6),date:todayKey(),name,
-    reps:last?last.reps:null,weight:last?last.weight:null,unit:last?last.unit:unit,ts:Date.now()});
+    reps:last?last.reps:null,weight:last?last.weight:null,unit:last?last.unit:unit,ts:Date.now(),...(last&&last.bw?{bw:true}:{})});
   if(isEnded()){ended=null;save(EKEY,null)}
   saveEntries();render();askPersist();
 }
@@ -137,7 +142,7 @@ function render(){
       const d=el("div","stat");d.appendChild(el("b","",v));d.appendChild(el("span","",l));st.appendChild(d);
     });
     const sx=$("sex");sx.textContent="";
-    gs.forEach(g=>{const r=el("div","line");r.appendChild(el("span","",g.name+" ("+g.items.length+(g.items.length===1?" set)":" sets)")));r.appendChild(el("span","vol",fmt(sum(g.items,unit))+" "+unit));sx.appendChild(r)});
+    gs.forEach(g=>{const r=el("div","line");r.appendChild(el("span","",g.name+" ("+g.items.length+(g.items.length===1?" set)":" sets)")));r.appendChild(el("span","vol",volLabel(g.items)));sx.appendChild(r)});
   }
 
   drawSync();
@@ -146,13 +151,19 @@ function render(){
   const box=$("today");box.textContent="";
   if(!td.length)box.appendChild(el("p","empty","No exercises yet. Add one above."));
   gs.forEach(g=>{
-    const w=el("div","grp");w.appendChild(el("h3","",g.name));
+    const isBW=g.items.every(e=>e.bw);
+    const w=el("div","grp");
+    const gh=el("div","ghd");gh.appendChild(el("h3","",g.name));
+    const bt=el("button","bwt","Bodyweight");bt.type="button";bt.setAttribute("aria-pressed",isBW);
+    bt.setAttribute("aria-label","Bodyweight exercise: "+g.name);
+    bt.onclick=()=>{g.items.forEach(e=>{if(isBW)delete e.bw;else e.bw=true});saveEntries();render()};
+    gh.appendChild(bt);w.appendChild(gh);
     const lt=lastTime(g.name);if(lt)w.appendChild(el("p","last","Last time ("+shortDate(lt.date)+"): "+setsLine(lt.sets,8)));
-    const hd=el("div","cols");["Set","Reps","Weight",""].forEach(t=>hd.appendChild(el("span","",t)));w.appendChild(hd);
+    const hd=el("div","cols");["Set","Reps",isBW?"Added":"Weight",""].forEach(t=>hd.appendChild(el("span","",t)));w.appendChild(hd);
     g.items.forEach((e,i)=>{
       const r=el("div","srow");r.appendChild(el("span","n",String(i+1)));
       r.appendChild(numInput(e,"reps","numeric","Reps, set "+(i+1)));
-      const wc=el("div","wcell");wc.appendChild(numInput(e,"weight","decimal","Weight, set "+(i+1)));wc.appendChild(el("span","u",e.unit));r.appendChild(wc);
+      const wc=el("div","wcell");wc.appendChild(numInput(e,"weight","decimal",(isBW?"Added weight, set ":"Weight, set ")+(i+1)));wc.appendChild(el("span","u",e.unit));r.appendChild(wc);
       const b=el("button","del","×");b.type="button";b.setAttribute("aria-label","Delete "+g.name+" set "+(i+1));b.onclick=()=>remove(e.id);
       r.appendChild(b);w.appendChild(r);
     });
@@ -180,7 +191,7 @@ function render(){
     const ex=el("div","ex");
     g2.forEach(g=>{
       const hd=el("div","hd");hd.appendChild(el("span","",g.name));
-      if(showVol)hd.appendChild(el("span","vol",fmt(sum(g.items,unit))+" "+unit));
+      if(showVol)hd.appendChild(el("span","vol",volLabel(g.items)));
       ex.appendChild(hd);
       g.items.forEach((e,i)=>{const s=el("div","s");s.appendChild(el("span","","Set "+(i+1)));s.appendChild(el("b","",setTxt(e)));ex.appendChild(s)});
     });
@@ -295,11 +306,11 @@ async function askPersist(){
 function drawHealth(){
   const total=entries.length,pending=entries.filter(e=>e.reps>0&&!synced.has(e.id)).length,linked=!!(cfg.url&&cfg.token);
   $("hstat").textContent=total+(total===1?" set":" sets")+(linked?(pending?" · "+pending+" not in sheet yet":" · all in sheet"):" · sheet not connected");
-  $("hdetail").textContent="Persistent storage: "+(persisted===true?"on":persisted===false?"off (the browser may clear this data if space runs low or the app goes unused for a long time)":"unknown")+". Last backup file: "+(lastBackup?new Date(lastBackup).toLocaleDateString():"never")+". Backups contain your workouts only, never your token.";
+  $("hdetail").textContent="Persistent storage: "+(persisted===true?"on":persisted===false?"off (the browser may clear this data if space runs low or the app goes unused for a long time)":"unknown")+". App version: "+APP_VERSION+". Last backup file: "+(lastBackup?new Date(lastBackup).toLocaleDateString():"never")+". Backups contain your workouts only, never your token.";
   $("brest").hidden=!linked;
 }
 function backupJSON(){
-  return JSON.stringify({app:"liftlog",version:1,exported:new Date().toISOString(),entries:entries.map(e=>({id:e.id,date:e.date,name:e.name,reps:e.reps,weight:e.weight,unit:e.unit,ts:e.ts}))},null,1);
+  return JSON.stringify({app:"liftlog",version:1,exported:new Date().toISOString(),entries:entries.map(e=>({id:e.id,date:e.date,name:e.name,reps:e.reps,weight:e.weight,unit:e.unit,ts:e.ts,...(e.bw?{bw:true}:{})}))},null,1);
 }
 async function deliver(file){
   try{
@@ -326,7 +337,7 @@ function cleanEntry(o){
   const reps=num(o.reps,0,1000),weight=num(o.weight,0,5000);
   if(reps===undefined||weight===undefined)return null;
   const unit=o.unit==="kg"?"kg":o.unit==="lb"?"lb":null;if(!unit)return null;
-  return {id,date,name,reps:reps===null?null:Math.round(reps),weight,unit,ts:isFinite(o.ts)?Number(o.ts):0};
+  return {id,date,name,reps:reps===null?null:Math.round(reps),weight,unit,ts:isFinite(o.ts)?Number(o.ts):0,...(o.bw===true?{bw:true}:{})};
 }
 function mergeEntries(list){
   const have=new Set(entries.map(e=>e.id));let added=0,dupes=0,bad=0;
@@ -352,7 +363,7 @@ $("brest").onclick=async()=>{
       const rows=Array.isArray(j.rows)?j.rows:[];total=Number(j.total)||0;
       const list=rows.map((x,i)=>{
         const d=String(x[0]),p=d.split("-").map(Number);
-        return {id:x[8],date:d,name:x[1],reps:x[3],weight:x[4],unit:x[5],ts:new Date(p[0],(p[1]||1)-1,p[2]||1,12).getTime()+offset+i};
+        return {id:x[8],date:d,name:x[1],reps:x[3],weight:x[4],bw:x[4]===""||x[4]===null,unit:x[5],ts:new Date(p[0],(p[1]||1)-1,p[2]||1,12).getTime()+offset+i};
       });
       const m=mergeEntries(list);r.added+=m.added;r.dupes+=m.dupes;r.bad+=m.bad;
       list.forEach(o=>{if(/^[A-Za-z0-9._-]{1,64}$/.test(String(o.id)))synced.add(String(o.id))}); // these are in the sheet by definition
@@ -373,8 +384,9 @@ $("cfgsave").parentNode.appendChild(confirmBtn("Forget this connection","Tap aga
 function shortDate(d){const [y,m,day]=d.split("-").map(Number);return new Date(y,m-1,day).toLocaleDateString(undefined,{month:"short",day:"numeric"})}
 function setsLine(items,max){
   const units=[...new Set(items.map(e=>e.unit))],cap=max||8;
-  const parts=items.slice(0,cap).map(e=>e.reps+" × "+wfmt(e.weight||0)+(units.length>1?" "+e.unit:""));
-  let t=parts.join(", ")+(units.length===1?" "+units[0]:"");
+  const anyBW=items.some(e=>e.bw);
+  const parts=items.slice(0,cap).map(e=>anyBW?e.reps+" × "+wTxt(e):e.reps+" × "+wfmt(e.weight||0)+(units.length>1?" "+e.unit:""));
+  let t=parts.join(", ")+(units.length===1&&!anyBW?" "+units[0]:"");
   if(items.length>cap)t+=" +"+(items.length-cap)+" more";
   return t;
 }
@@ -466,6 +478,8 @@ $("exp").onclick=async()=>{
 
 /* Offline support */
 if("serviceWorker" in navigator&&location.protocol.startsWith("http")){
+  const hadSW=!!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener("controllerchange",()=>{if(hadSW)showBanner("App updated. Close and reopen it to use the new version.")});
   window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));
 }
 
