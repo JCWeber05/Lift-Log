@@ -1,4 +1,4 @@
-const APP_VERSION="1.8";
+const APP_VERSION="1.8.1";
 const $=id=>document.getElementById(id);
 const KEY="liftlog:v1",BAK="liftlog:v1:bak",TKEY="liftlog:timer",UKEY="liftlog:unit",EKEY="liftlog:ended",BKEY="liftlog:lastbackup",DAMAGED="liftlog:damaged:";
 let storageOK=true,notice="";
@@ -18,7 +18,7 @@ function readEntries(){
     try{localStorage.setItem(DAMAGED+Date.now(),a.bad)}catch(e){}
     const b=tryKey(BAK);
     if(b.val){notice="Your saved history was damaged. Restored the previous copy ("+b.val.length+" sets).";return b.val}
-    notice="Your saved history was damaged and couldn’t be restored here. A copy was set aside. Restore from your sheet or a backup file in History → Data and backup.";
+    notice="Your saved history was damaged and couldn’t be restored here. A copy was set aside. Restore from your sheet or a backup file in Settings → Data and backup.";
     return [];
   }
   const b=tryKey(BAK);
@@ -45,7 +45,7 @@ let raw=readEntries();
 // each entry is one set; older entries logged as "N sets" are split into single sets
 let entries=raw.filter(e=>e&&typeof e==="object").flatMap(e=>{
   const n=e.sets>1?e.sets:1;
-  return Array.from({length:n},(_,i)=>({id:n>1?e.id+"-"+i:e.id,date:e.date,name:e.name,reps:e.reps,weight:e.weight,unit:e.unit||"lb",ts:(e.ts||0)+i,...(e.bw===true?{bw:true}:{})}));
+  return Array.from({length:n},(_,i)=>({id:n>1?e.id+"-"+i:e.id,date:e.date,name:e.name,reps:e.reps,weight:e.weight,unit:e.unit||"lb",ts:(e.ts||0)+i,...(e.bw===true?{bw:true}:{}),...(typeof e.ss==="string"&&/^[A-Za-z0-9]{1,12}$/.test(e.ss)?{ss:e.ss}:{})}));
 });
 saveEntries();
 let unit=load(UKEY,"lb"),timer=load(TKEY,{acc:0,start:null}),ended=load(EKEY,null);
@@ -95,20 +95,21 @@ function setUnit(u){unit=u;save(UKEY,u);drawUnit();render()}
 $("u-lb").onclick=()=>setUnit("lb");
 $("u-kg").onclick=()=>setUnit("kg");
 function showTab(t){
-  const h=t==="hist";
-  $("v-today").hidden=h;$("v-hist").hidden=!h;
-  $("t-today").setAttribute("aria-selected",!h);$("t-hist").setAttribute("aria-selected",h);
+  ["today","hist","set"].forEach(k=>{$("v-"+k).hidden=k!==t;$("t-"+k).setAttribute("aria-selected",k===t)});
 }
 $("t-today").onclick=()=>showTab("today");
 $("t-hist").onclick=()=>{render();showTab("hist")};
+$("t-set").onclick=()=>showTab("set");
 
 /* Form */
-function addSet(name,src){
+let lastTs=0;const nextTs=()=>{lastTs=Math.max(Date.now(),lastTs+1);return lastTs};
+function addSet(name,src,quiet){
   const last=src||entries.filter(e=>e.name.toLowerCase()===name.toLowerCase()).sort((a,b)=>b.ts-a.ts)[0];
   entries.push({id:Date.now()+Math.random().toString(36).slice(2,6),date:todayKey(),name,
-    reps:last?last.reps:null,weight:last?last.weight:null,unit:last?last.unit:unit,ts:Date.now(),...(last&&last.bw?{bw:true}:{})});
+    reps:last?last.reps:null,weight:last?last.weight:null,unit:last?last.unit:unit,ts:nextTs(),...(last&&last.bw?{bw:true}:{}),
+    ...(last&&last.ss&&last.date===todayKey()?{ss:last.ss}:{})}); // a superset only lasts for the day it was made
   if(isEnded()){ended=null;save(EKEY,null)}
-  saveEntries();render();askPersist();
+  if(!quiet){saveEntries();render();askPersist()}
 }
 $("f").addEventListener("submit",ev=>{
   ev.preventDefault();
@@ -122,6 +123,88 @@ function numInput(e,field,mode,label){
   i.value=e[field]==null?"":e[field];i.placeholder="0";i.setAttribute("aria-label",label);
   i.oninput=()=>{const v=parseFloat(i.value);e[field]=isNaN(v)?null:(field==="reps"?Math.round(v):v);saveEntries()};
   return i;
+}
+
+/* Exercise cards */
+let pairing=null; // lower-case name of the exercise that is choosing a superset partner
+function bwButton(g,label){
+  const isBW=g.items.every(e=>e.bw);
+  const bt=el("button","bwt","Bodyweight");bt.type="button";bt.setAttribute("aria-pressed",isBW);
+  bt.setAttribute("aria-label",label);
+  bt.onclick=()=>{g.items.forEach(e=>{if(isBW)delete e.bw;else e.bw=true});saveEntries();render()};
+  return bt;
+}
+function linkSuperset(a,b){
+  const id=b.items[0].ss||a.items[0].ss||(Date.now().toString(36)+Math.random().toString(36).slice(2,5));
+  a.items.forEach(e=>{e.ss=id});b.items.forEach(e=>{e.ss=id});
+  pairing=null;saveEntries();render();
+}
+function plainCard(g,gs){
+  const key=g.name.toLowerCase(),isBW=g.items.every(e=>e.bw);
+  const w=el("div","grp");
+  const gh=el("div","ghd");gh.appendChild(el("h3","",g.name));
+  const chips=el("div","chips");chips.appendChild(bwButton(g,"Bodyweight exercise: "+g.name));
+  const st=el("button","bwt","Superset");st.type="button";st.setAttribute("aria-pressed",pairing===key);
+  st.setAttribute("aria-label","Superset "+g.name+" with another exercise");
+  st.onclick=()=>{pairing=pairing===key?null:key;render()};chips.appendChild(st);
+  gh.appendChild(chips);w.appendChild(gh);
+  if(pairing===key){
+    const pb=el("div","pairbox"),others=gs.filter(o=>o.name.toLowerCase()!==key);
+    if(!others.length)pb.appendChild(el("p","sub","Add another exercise first, then link them here."));
+    else{
+      pb.appendChild(el("p","sub","Superset "+g.name+" with:"));
+      const row=el("div","pairs");
+      others.forEach(o=>{const b=el("button","btn",o.name);b.type="button";b.onclick=()=>linkSuperset(g,o);row.appendChild(b)});
+      pb.appendChild(row);
+    }
+    w.appendChild(pb);
+  }
+  const lt=lastTime(g.name);if(lt)w.appendChild(el("p","last","Last time ("+shortDate(lt.date)+"): "+setsLine(lt.sets,8)));
+  const hd=el("div","cols");["Set","Reps",isBW?"Added":"Weight",""].forEach(t=>hd.appendChild(el("span","",t)));w.appendChild(hd);
+  g.items.forEach((e,i)=>{
+    const r=el("div","srow");r.appendChild(el("span","n",String(i+1)));
+    r.appendChild(numInput(e,"reps","numeric","Reps, set "+(i+1)));
+    const wc=el("div","wcell");wc.appendChild(numInput(e,"weight","decimal",(isBW?"Added weight, set ":"Weight, set ")+(i+1)));wc.appendChild(el("span","u",e.unit));r.appendChild(wc);
+    const b=el("button","del","×");b.type="button";b.setAttribute("aria-label","Delete "+g.name+" set "+(i+1));b.onclick=()=>remove(e.id);
+    r.appendChild(b);w.appendChild(r);
+  });
+  const p=el("button","plus","+");p.type="button";p.setAttribute("aria-label","Add set to "+g.name);
+  p.onclick=()=>addSet(g.name,g.items[g.items.length-1]);
+  w.appendChild(p);return w;
+}
+// A superset: the exercises are done back to back, so sets are shown in rounds (round 1 of each, then round 2 of each).
+function supersetCard(members){
+  const w=el("div","grp ss");
+  const gh=el("div","ghd");gh.appendChild(el("h3","","Superset: "+members.map(m=>m.name).join(" + ")));
+  const ub=el("button","bwt","Unlink");ub.type="button";ub.setAttribute("aria-label","Unlink this superset");
+  ub.onclick=()=>{members.forEach(m=>m.items.forEach(e=>{delete e.ss}));saveEntries();render()};
+  gh.appendChild(ub);w.appendChild(gh);
+  members.forEach(m=>{
+    const mh=el("div","ssm");mh.appendChild(el("span","ssn",m.name));mh.appendChild(bwButton(m,"Bodyweight exercise: "+m.name));w.appendChild(mh);
+    const lt=lastTime(m.name);if(lt)w.appendChild(el("p","last","Last time ("+shortDate(lt.date)+"): "+setsLine(lt.sets,8)));
+  });
+  const n=Math.max(...members.map(m=>m.items.length));
+  for(let i=0;i<n;i++){
+    const rh=el("div","ssr");rh.appendChild(el("span","","Round "+(i+1)));
+    const db=el("button","del","×");db.type="button";db.setAttribute("aria-label","Delete round "+(i+1));
+    db.onclick=()=>{const ids=new Set(members.map(m=>m.items[i]&&m.items[i].id).filter(Boolean));entries=entries.filter(e=>!ids.has(e.id));saveEntries(true);render()};
+    rh.appendChild(db);w.appendChild(rh);
+    members.forEach(m=>{
+      const e=m.items[i],r=el("div","ssrow");r.appendChild(el("span","ssn",m.name));
+      if(e){
+        const isBW=m.items.every(x=>x.bw);
+        r.appendChild(numInput(e,"reps","numeric","Reps, "+m.name+", round "+(i+1)));
+        const wc=el("div","wcell");wc.appendChild(numInput(e,"weight","decimal",(isBW?"Added weight, ":"Weight, ")+m.name+", round "+(i+1)));wc.appendChild(el("span","u",e.unit));r.appendChild(wc);
+      }else{
+        const add=el("button","btn","Add set");add.type="button";add.setAttribute("aria-label","Add a set to "+m.name);
+        add.onclick=()=>addSet(m.name,m.items[m.items.length-1]);r.appendChild(add);
+      }
+      w.appendChild(r);
+    });
+  }
+  const p=el("button","plus","+");p.type="button";p.setAttribute("aria-label","Add a round to this superset");
+  p.onclick=()=>{members.forEach(m=>addSet(m.name,m.items[m.items.length-1],true));saveEntries();render();askPersist()};
+  w.appendChild(p);return w;
 }
 
 /* Render */
@@ -150,26 +233,17 @@ function render(){
   $("thead").textContent="Today’s sets"+(td.length?" ("+td.length+")":"");
   const box=$("today");box.textContent="";
   if(!td.length)box.appendChild(el("p","empty","No exercises yet. Add one above."));
+  // normal exercise cards, plus one block per superset (2+ exercises sharing a superset id)
+  const bySS={};
+  gs.forEach(g=>{const k=g.items[0].ss;if(k&&g.items.every(e=>e.ss===k))(bySS[k]=bySS[k]||[]).push(g)});
+  const shownSS=new Set();
   gs.forEach(g=>{
-    const isBW=g.items.every(e=>e.bw);
-    const w=el("div","grp");
-    const gh=el("div","ghd");gh.appendChild(el("h3","",g.name));
-    const bt=el("button","bwt","Bodyweight");bt.type="button";bt.setAttribute("aria-pressed",isBW);
-    bt.setAttribute("aria-label","Bodyweight exercise: "+g.name);
-    bt.onclick=()=>{g.items.forEach(e=>{if(isBW)delete e.bw;else e.bw=true});saveEntries();render()};
-    gh.appendChild(bt);w.appendChild(gh);
-    const lt=lastTime(g.name);if(lt)w.appendChild(el("p","last","Last time ("+shortDate(lt.date)+"): "+setsLine(lt.sets,8)));
-    const hd=el("div","cols");["Set","Reps",isBW?"Added":"Weight",""].forEach(t=>hd.appendChild(el("span","",t)));w.appendChild(hd);
-    g.items.forEach((e,i)=>{
-      const r=el("div","srow");r.appendChild(el("span","n",String(i+1)));
-      r.appendChild(numInput(e,"reps","numeric","Reps, set "+(i+1)));
-      const wc=el("div","wcell");wc.appendChild(numInput(e,"weight","decimal",(isBW?"Added weight, set ":"Weight, set ")+(i+1)));wc.appendChild(el("span","u",e.unit));r.appendChild(wc);
-      const b=el("button","del","×");b.type="button";b.setAttribute("aria-label","Delete "+g.name+" set "+(i+1));b.onclick=()=>remove(e.id);
-      r.appendChild(b);w.appendChild(r);
-    });
-    const p=el("button","plus","+");p.type="button";p.setAttribute("aria-label","Add set to "+g.name);
-    p.onclick=()=>addSet(g.name,g.items[g.items.length-1]);
-    w.appendChild(p);box.appendChild(w);
+    const k=g.items[0].ss;
+    if(k&&bySS[k]&&bySS[k].length>1&&g.items.every(e=>e.ss===k)){
+      if(!shownSS.has(k)){shownSS.add(k);box.appendChild(supersetCard(bySS[k]))}
+      return;
+    }
+    box.appendChild(plainCard(g,gs));
   });
 
   // history
@@ -181,7 +255,7 @@ function render(){
     const list=days[k].sort((a,b)=>a.ts-b.ts),[y,mo,d]=k.split("-").map(Number);
     const showVol=k!==todayKey()||isEnded();
     const label=new Date(y,mo-1,d).toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric",year:"numeric"});
-    const g2=groups(list);
+    const g2=groups(list),ssN={};g2.forEach(g=>{const k=g.items[0].ss;if(k)ssN[k]=(ssN[k]||0)+1});
     const det=document.createElement("details"),sm2=document.createElement("summary"),m=el("div","main");
     m.appendChild(el("strong","",label));
     m.appendChild(el("small","",g2.length+(g2.length===1?" exercise, ":" exercises, ")+list.length+(list.length===1?" set":" sets")));
@@ -190,7 +264,7 @@ function render(){
     det.appendChild(sm2);
     const ex=el("div","ex");
     g2.forEach(g=>{
-      const hd=el("div","hd");hd.appendChild(el("span","",g.name));
+      const hd=el("div","hd");hd.appendChild(el("span","",g.name+(g.items[0].ss&&ssN[g.items[0].ss]>1?" · superset":"")));
       if(showVol)hd.appendChild(el("span","vol",volLabel(g.items)));
       ex.appendChild(hd);
       g.items.forEach((e,i)=>{const s=el("div","s");s.appendChild(el("span","","Set "+(i+1)));s.appendChild(el("b","",setTxt(e)));ex.appendChild(s)});
@@ -249,7 +323,7 @@ async function call(payload){
 }
 function describe(err){
   const c=err&&err.code;
-  if(c==="bad_token")return "The secret token doesn’t match the script. Check it in History → Google Sheets sync.";
+  if(c==="bad_token")return "The secret token doesn’t match the script. Check it in Settings → Google Sheets sync.";
   if(c==="bad_response")return "The web app URL didn’t answer like your script. Check the URL and that access is set to Anyone.";
   if(err&&err.msg==="token_not_set")return "Your script still has the placeholder token. Set your own secret in the script and redeploy.";
   if(err&&err.msg==="server_error")return "The script hit an error. Open Apps Script → Executions to see why.";
@@ -260,7 +334,7 @@ async function syncSheet(opts){
   const o=opts||{}; // pastOnly + quiet: silent retry of earlier days' unsaved sets
   if(syncing){if(!o.quiet)rerun=true;return}
   if(!o.quiet)syncRetry=false;
-  if(!cfg.url||!cfg.token){if(!o.quiet){syncMsg="Sheet sync isn’t set up. Add your script URL in History → Google Sheets sync.";drawSync()}return}
+  if(!cfg.url||!cfg.token){if(!o.quiet){syncMsg="Sheet sync isn’t set up. Add your script URL in Settings → Google Sheets sync.";drawSync()}return}
   const all=entries.slice().sort((a,b)=>a.date===b.date?a.ts-b.ts:(a.date<b.date?-1:1));
   const no={},cnt={};
   all.forEach(e=>{const k=e.date+"|"+e.name.toLowerCase();cnt[k]=(cnt[k]||0)+1;no[e.id]=cnt[k]});
@@ -297,11 +371,38 @@ const SCRIPT_TEMPLATE="// Lift log: receives workouts from the app and adds them
 const SETKEY="liftlog:setup";
 const ACCENTS={blue:["#2B4BD8","Blue"],green:["#1B7F4B","Green"],orange:["#B85400","Orange"],purple:["#7B3FD1","Purple"],red:["#C2263A","Red"]};
 let setup=load(SETKEY,null);if(!setup||typeof setup!=="object")setup={};
+const HEX6=/^#[0-9A-Fa-f]{6}$/;
 setup={status:setup.status==="skipped"||setup.status==="done"?setup.status:"",
   name:typeof setup.name==="string"?setup.name.replace(/[\u0000-\u001f\u007f]/g,"").slice(0,30):"",
-  accent:Object.prototype.hasOwnProperty.call(ACCENTS,setup.accent)?setup.accent:"blue",
+  custom:HEX6.test(setup.custom||"")?setup.custom.toUpperCase():"#2B4BD8",
+  accent:Object.prototype.hasOwnProperty.call(ACCENTS,setup.accent)||(setup.accent==="custom"&&HEX6.test(setup.custom||""))?setup.accent:"blue",
   token:/^[A-Za-z0-9]{24,64}$/.test(setup.token||"")?setup.token:""};
 const saveSetup=()=>save(SETKEY,setup);
+/* Colour maths for the custom colour wheel */
+const hexRGB=h=>[1,3,5].map(i=>parseInt(h.slice(i,i+2),16));
+const rgbHex=(r,g,b)=>"#"+[r,g,b].map(v=>Math.round(Math.max(0,Math.min(255,v))).toString(16).padStart(2,"0")).join("").toUpperCase();
+const lumOf=h=>{const [r,g,b]=hexRGB(h).map(c=>{c/=255;return c<=.03928?c/12.92:Math.pow((c+.055)/1.055,2.4)});return .2126*r+.7152*g+.0722*b};
+const contrastOf=(a,b)=>{const x=lumOf(a),y=lumOf(b);return (Math.max(x,y)+.05)/(Math.min(x,y)+.05)};
+const mixHex=(a,b,t)=>{const A=hexRGB(a),B=hexRGB(b);return rgbHex(A[0]+(B[0]-A[0])*t,A[1]+(B[1]-A[1])*t,A[2]+(B[2]-A[2])*t)};
+function hsvToHex(h,sat,v){
+  h=((h%360)+360)%360;const c=v*sat,x=c*(1-Math.abs((h/60)%2-1)),m=v-c;
+  const [r,g,b]=h<60?[c,x,0]:h<120?[x,c,0]:h<180?[0,c,x]:h<240?[0,x,c]:h<300?[x,0,c]:[c,0,x];
+  return rgbHex((r+m)*255,(g+m)*255,(b+m)*255);
+}
+function hexToHsv(hex){
+  const [r,g,b]=hexRGB(hex).map(x=>x/255),mx=Math.max(r,g,b),mn=Math.min(r,g,b),d=mx-mn;
+  let h=0;if(d){h=mx===r?((g-b)/d)%6:mx===g?(b-r)/d+2:(r-g)/d+4;h*=60;if(h<0)h+=360}
+  return [h,mx?d/mx:0,mx];
+}
+// Any colour must stay readable: darken it for the light theme and lighten it for the dark theme until text on it has enough contrast.
+function accentPair(hex){
+  let l=hex;for(let t=0;t<=1.0001;t+=.04){l=mixHex(hex,"#000000",t);if(contrastOf(l,"#FFFFFF")>=4.5)break}
+  let d=hex;for(let t=0;t<=1.0001;t+=.04){d=mixHex(hex,"#FFFFFF",t);if(contrastOf(d,"#1B212A")>=4.5)break}
+  return [l,d];
+}
+const onColor=h=>contrastOf(h,"#FFFFFF")>=contrastOf(h,"#0E1320")?"#FFFFFF":"#0E1320";
+const accentCard=()=>setup.accent==="custom"?accentPair(setup.custom)[0]:(ACCENTS[setup.accent]||ACCENTS.blue)[0];
+
 function makeToken(){ // 40 random letters and digits from the browser's secure random source
   const a="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789",buf=new Uint8Array(64);let t="";
   while(t.length<40){crypto.getRandomValues(buf);for(const b of buf){if(b<248&&t.length<40)t+=a[b%62]}}
@@ -312,26 +413,64 @@ function scriptText(){
   return SCRIPT_TEMPLATE.replace('const TOKEN = "CHANGE-THIS-TO-A-LONG-RANDOM-STRING";',()=>'const TOKEN = "'+setup.token+'";');
 }
 function drawPersonal(){
-  document.documentElement.dataset.accent=setup.accent;
+  const root=document.documentElement;root.dataset.accent=setup.accent;
+  if(setup.accent==="custom"){
+    const [l,d]=accentPair(setup.custom);
+    root.style.setProperty("--cl",l);root.style.setProperty("--ocl",onColor(l));root.style.setProperty("--cd",d);root.style.setProperty("--ocd",onColor(d));
+  }
   const hr=new Date().getHours(),g=hr<12?"Good morning":hr<18?"Good afternoon":"Good evening",hi=$("hello");
   hi.hidden=!setup.name;hi.textContent=setup.name?g+", "+setup.name:"";
-  $("persstat").textContent=(setup.name||"No name set")+" · "+ACCENTS[setup.accent][1];
+  $("persstat").textContent=(setup.name||"No name set")+" · "+(setup.accent==="custom"?"Custom":ACCENTS[setup.accent][1]);
   if($("pname").value!==setup.name&&document.activeElement!==$("pname"))$("pname").value=setup.name;
 }
 function setName(v){setup.name=v.replace(/[\u0000-\u001f\u007f]/g,"").trim().slice(0,30);saveSetup();drawPersonal()}
-function swatches(box){
+function colorPicker(box){
   box.textContent="";
+  const row=el("div","sw");row.setAttribute("role","group");row.setAttribute("aria-label","Accent color");
+  const press=()=>row.querySelectorAll("button").forEach(x=>x.setAttribute("aria-pressed",x.dataset.k===setup.accent));
   Object.keys(ACCENTS).forEach(k=>{
-    const b=el("button","");b.type="button";b.style.background=ACCENTS[k][0];
-    b.setAttribute("aria-label",ACCENTS[k][1]);b.setAttribute("aria-pressed",k===setup.accent);
-    b.onclick=()=>{setup.accent=k;saveSetup();drawPersonal();swatches(box)};
-    box.appendChild(b);
+    const b=el("button","");b.type="button";b.dataset.k=k;b.style.background=ACCENTS[k][0];
+    b.setAttribute("aria-label",ACCENTS[k][1]);
+    b.onclick=()=>{setup.accent=k;saveSetup();drawPersonal();press()};
+    row.appendChild(b);
   });
+  const cb=el("button","swc");cb.type="button";cb.dataset.k="custom";cb.setAttribute("aria-label","Custom color, open the color wheel");
+  row.appendChild(cb);box.appendChild(row);
+  const wrap=el("div","wheelbox");wrap.hidden=true;box.appendChild(wrap);
+  let [H,S,V]=hexToHsv(setup.custom);
+  const ww=el("div","wheelwrap"),wheel=el("div","wheel"),dot=el("div","wdot");
+  ww.tabIndex=0;ww.setAttribute("role","group");ww.setAttribute("aria-label","Color wheel. Use the arrow keys to change the color.");
+  ww.appendChild(wheel);ww.appendChild(dot);wrap.appendChild(ww);
+  const ctl=el("div","wctl"),rng=document.createElement("input");rng.type="range";rng.min="30";rng.max="100";rng.setAttribute("aria-label","Brightness");
+  const hexIn=el("input","");hexIn.type="text";hexIn.maxLength=7;hexIn.setAttribute("aria-label","Hex color");hexIn.autocapitalize="off";hexIn.spellcheck=false;
+  ctl.appendChild(rng);ctl.appendChild(hexIn);wrap.appendChild(ctl);
+  const place=()=>{
+    const a=H*Math.PI/180;dot.style.left=(50+S*50*Math.sin(a))+"%";dot.style.top=(50-S*50*Math.cos(a))+"%";
+    const hex=hsvToHex(H,S,V);dot.style.background=hex;wheel.style.filter="brightness("+V+")";rng.value=String(Math.round(V*100));
+    if(document.activeElement!==hexIn)hexIn.value=hex;
+  };
+  const apply=()=>{setup.custom=hsvToHex(H,S,V);setup.accent="custom";saveSetup();drawPersonal();press();place()};
+  const pick=ev=>{const r=ww.getBoundingClientRect(),dx=ev.clientX-(r.left+r.width/2),dy=ev.clientY-(r.top+r.height/2);
+    S=Math.min(1,Math.hypot(dx,dy)/(r.width/2));H=(Math.atan2(dx,-dy)*180/Math.PI+360)%360;apply()};
+  ww.addEventListener("pointerdown",ev=>{try{ww.setPointerCapture(ev.pointerId)}catch(e){}pick(ev)});
+  ww.addEventListener("pointermove",ev=>{if(ev.buttons&&ww.hasPointerCapture&&ww.hasPointerCapture(ev.pointerId))pick(ev)});
+  ww.addEventListener("keydown",ev=>{
+    const k=ev.key;if(!["ArrowLeft","ArrowRight","ArrowUp","ArrowDown"].includes(k))return;ev.preventDefault();
+    if(k==="ArrowLeft")H=(H+355)%360;else if(k==="ArrowRight")H=(H+5)%360;else if(k==="ArrowUp")S=Math.min(1,S+.05);else S=Math.max(0,S-.05);apply();
+  });
+  rng.addEventListener("input",()=>{V=Number(rng.value)/100;apply()});
+  hexIn.addEventListener("input",()=>{const v=hexIn.value.trim().replace(/^#?/,"#");if(HEX6.test(v)){[H,S,V]=hexToHsv(v);apply()}});
+  hexIn.addEventListener("blur",place);
+  cb.onclick=()=>{
+    if(wrap.hidden){wrap.hidden=false;if(setup.accent!=="custom")apply();else place()}
+    else wrap.hidden=true;
+  };
+  press();place();if(setup.accent==="custom")wrap.hidden=false;
 }
 $("pname").addEventListener("input",()=>{setup.name=$("pname").value.replace(/[\u0000-\u001f\u007f]/g,"").slice(0,30);saveSetup();
   const hi=$("hello");hi.hidden=!setup.name.trim();hi.textContent=setup.name.trim()?"Hello, "+setup.name.trim():""});
 $("pname").addEventListener("change",()=>setName($("pname").value));
-swatches($("psw"));
+colorPicker($("psw"));
 
 const wiz=$("wiz"),wbody=$("wbody");let wstep=0;
 // Google's script editor isn't in the phone apps, so on a touch device the guide hands the Google part to a computer.
@@ -348,7 +487,7 @@ async function sendScript(msg,ta){
 function openWizard(n){if(phoneMode&&n>=1&&n<=4)n=1;wstep=n;wiz.hidden=false;document.body.style.overflow="hidden";drawWizard()}
 function closeWizard(status){
   if(status){setup.status=status;saveSetup()}
-  wiz.hidden=true;document.body.style.overflow="";drawPersonal();swatches($("psw"));drawCfg();drawSync();render();window.scrollTo(0,0);
+  wiz.hidden=true;document.body.style.overflow="";drawPersonal();colorPicker($("psw"));drawCfg();drawSync();render();window.scrollTo(0,0);
 }
 function wbtn(text,cls,fn){const b=el("button","btn"+(cls?" "+cls:""),text);b.type="button";b.onclick=fn;return b}
 function wlist(tag,items){const l=el(tag,"");items.forEach(t=>{const li=el("li","");if(Array.isArray(t)){t.forEach((p,i)=>{if(i%2)li.appendChild(el("b","",p));else if(p)li.appendChild(document.createTextNode(p))})}else li.textContent=t;l.appendChild(li)});return l}
@@ -366,7 +505,7 @@ function drawWizard(){
     const inp=el("input","");inp.type="text";inp.id="wname";inp.maxLength=30;inp.autocomplete="given-name";inp.value=setup.name;
     inp.oninput=()=>{setup.name=inp.value.replace(/[\u0000-\u001f\u007f]/g,"").slice(0,30);saveSetup()};
     wbody.appendChild(inp);
-    wbody.appendChild(el("p","sub","Pick a color"));const sw=el("div","sw");sw.setAttribute("role","group");sw.setAttribute("aria-label","Accent color");wbody.appendChild(sw);swatches(sw);
+    wbody.appendChild(el("p","sub","Pick a color"));const sw=el("div","");wbody.appendChild(sw);colorPicker(sw);
     const sec=el("div","warn");sec.appendChild(el("b","","Private by design. "));sec.appendChild(document.createTextNode("No account, no tracking, no server of ours. Your workouts live on this device, and optionally in a Google Sheet in your own Google account."));wbody.appendChild(sec);
     acts.appendChild(wbtn("Next: save to Google Sheets (optional)","primary",()=>{setName(inp.value);wstep=1;drawWizard()}));
     acts.appendChild(wbtn("Skip, just start lifting","",()=>{setName(inp.value);closeWizard("skipped")}));
@@ -460,7 +599,8 @@ function maybeWizard(){if(!setup.status&&!(cfg.url&&cfg.token)&&!entries.length)
 const SPLASH_COLORS={blue:["#2B4BD8","#6C3BE0","#12B5CB","#3B82F6"],green:["#1B7F4B","#0EA5A4","#65A30D","#059669"],orange:["#B85400","#D97706","#DC2626","#E11D48"],purple:["#7B3FD1","#DB2777","#4F46E5","#0891B2"],red:["#C2263A","#EA580C","#C026D3","#6D28D9"]};
 const splash=$("splash"),mainEl=document.querySelector("main");
 function drawSplash(){
-  const cols=SPLASH_COLORS[setup.accent]||SPLASH_COLORS.blue;
+  let cols=SPLASH_COLORS[setup.accent]||SPLASH_COLORS.blue;
+  if(setup.accent==="custom"){const [hh,ss,vv]=hexToHsv(setup.custom),sat=Math.max(ss,.55),val=Math.min(Math.max(vv,.45),.8);cols=[0,40,-40,80].map(o=>hsvToHex(hh+o,sat,val))}
   cols.forEach((c,i)=>splash.style.setProperty("--g"+(i+1),c));
   const hr=new Date().getHours(),g=hr<12?"Good morning":hr<18?"Good afternoon":"Good evening";
   $("sphello").textContent=setup.name?g+", "+setup.name:"Welcome";
@@ -506,7 +646,7 @@ function drawHealth(){
   $("brest").hidden=!linked;
 }
 function backupJSON(){
-  return JSON.stringify({app:"liftlog",version:1,exported:new Date().toISOString(),entries:entries.map(e=>({id:e.id,date:e.date,name:e.name,reps:e.reps,weight:e.weight,unit:e.unit,ts:e.ts,...(e.bw?{bw:true}:{})}))},null,1);
+  return JSON.stringify({app:"liftlog",version:1,exported:new Date().toISOString(),entries:entries.map(e=>({id:e.id,date:e.date,name:e.name,reps:e.reps,weight:e.weight,unit:e.unit,ts:e.ts,...(e.bw?{bw:true}:{}),...(e.ss?{ss:e.ss}:{})}))},null,1);
 }
 async function deliver(file,sharedMsg){
   try{
@@ -542,7 +682,7 @@ function cleanEntry(o){
   const reps=num(o.reps,0,1000),weight=num(o.weight,0,5000);
   if(reps===undefined||weight===undefined)return null;
   const unit=o.unit==="kg"?"kg":o.unit==="lb"?"lb":null;if(!unit)return null;
-  return {id,date,name,reps:reps===null?null:Math.round(reps),weight,unit,ts:isFinite(o.ts)?Number(o.ts):0,...(o.bw===true?{bw:true}:{})};
+  return {id,date,name,reps:reps===null?null:Math.round(reps),weight,unit,ts:isFinite(o.ts)?Number(o.ts):0,...(o.bw===true?{bw:true}:{}),...(typeof o.ss==="string"&&/^[A-Za-z0-9]{1,12}$/.test(o.ss)?{ss:o.ss}:{})};
 }
 function mergeEntries(list){
   const have=new Set(entries.map(e=>e.id));let added=0,dupes=0,bad=0;
@@ -612,7 +752,7 @@ function workoutText(){
 }
 function drawCard(){
   const td=todaySets(),gs=groups(td),[y,m,d]=todayKey().split("-").map(Number);
-  const W=1080,P=72,INK="#151A22",MUTED="#5F6B7A",ACC=(ACCENTS[setup.accent]||ACCENTS.blue)[0];
+  const W=1080,P=72,INK="#151A22",MUTED="#5F6B7A",ACC=accentCard();
   const cond=(w,s)=>w+" "+s+"px 'Barlow Condensed','Arial Narrow',sans-serif";
   const body=(w,s)=>w+" "+s+"px Barlow,system-ui,-apple-system,'Segoe UI',sans-serif";
   const c=document.createElement("canvas"),x=c.getContext("2d");

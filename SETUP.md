@@ -1,6 +1,6 @@
 # Lift log: setup (about 15 minutes, one time)
 
-New in 1.5: the app walks you through this itself the first time you open it (or any time from History > Google Sheets sync > Step-by-step setup guide). The steps below are the same thing in writing.
+New in 1.5: the app walks you through this itself the first time you open it (or any time from Settings > Google Sheets sync > Step-by-step setup guide). The steps below are the same thing in writing.
 
 You'll do three things: connect the app to your Google Sheet, put the app online, and install it on your phone.
 
@@ -36,7 +36,7 @@ Open your app's URL in your phone's browser.
 - **iPhone (Safari):** tap Share, then **Add to Home Screen**, then Add.
 - **Android (Chrome):** tap ⋮, then **Install app** (or **Add to Home screen**).
 
-Open it from the new icon. Go to **History → Google Sheets sync**, paste the Web app URL and your secret token, and tap **Save and test**. You should see "Connected."
+Open it from the new icon. Go to **Settings → Google Sheets sync**, paste the Web app URL and your secret token, and tap **Save and test**. You should see "Connected."
 
 ## Using it
 
@@ -46,7 +46,7 @@ The first time you connect, any sets already logged on your phone are also sent 
 
 ## Keeping your data safe
 
-- **Data and backup** (History tab) shows how many sets are on the phone and how many are not in your sheet yet. It also has **Export backup** (a file of your workouts, never your token), **Import backup**, and **Restore from sheet**, which rebuilds your history from the Lift log tab if the phone's data is ever lost.
+- **Data and backup** (Settings tab) shows how many sets are on the phone and how many are not in your sheet yet. It also has **Export backup** (a file of your workouts, never your token), **Import backup**, and **Restore from sheet**, which rebuilds your history from the Lift log tab if the phone's data is ever lost.
 - The app asks the browser to treat its data as persistent, and keeps a previous copy of your history. If it ever finds damaged data, it restores that copy and tells you.
 - Sets from earlier days that didn't reach the sheet are retried automatically when you open the app or get back online. Today's sets still go when you tap **End workout**.
 - **Forget this connection** (in Google Sheets sync) removes the script URL and token from the phone.
@@ -62,12 +62,16 @@ The first time you connect, any sets already logged on your phone are also sent 
 
 Upload the changed files to the same GitHub repository (Add file > Upload files, same names, then Commit). That is the whole update. Don't delete the repository or change its name, or the app's address changes.
 
-Every release has a number (see CHANGELOG.md for what changed in each and which files to upload). Your phone shows its version in History > Data and backup.
+Every release has a number (see CHANGELOG.md for what changed in each and which files to upload). Your phone shows its version in Settings > Data and backup.
 
 Which files change: usually `app.js` and `index.html`, plus `sw.js` when the version number inside it goes up. A new release will say which ones.
 
-On your phone: open the app once while online, close it fully, and open it again. The second launch runs the new version. History > Data and backup shows "App version" so you can confirm. A banner also says "App updated" when a new version has arrived.
+On your phone: open the app once while online, close it fully, and open it again. The second launch runs the new version. Settings > Data and backup shows "App version" so you can confirm. A banner also says "App updated" when a new version has arrived.
 
 Your workouts and your sheet connection are kept. Updating never clears them.
 
 Your workout data lives in your phone's browser storage. Clearing the site data for the app erases it, so the sheet is your permanent record.
+
+## Viewing your workouts on a computer
+
+No Google account needed. On your phone, open Settings > Data and backup and tap **Send to my computer**. Send the file to yourself (email, AirDrop, Drive, a message). On the computer, open `view.html` from your app's address (for example `https://your-name.github.io/your-repo/view.html`) and drop the file on it. The page runs only in that browser and never uploads your file. Send a new file whenever you want it updated.

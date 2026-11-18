@@ -155,6 +155,30 @@ details[open] summary::after{content:"−"}
 .sw button[aria-pressed=true]{border-color:var(--ink)}
 .priv li{margin:8px 0}
 
+:root[data-accent=custom]{--accent:var(--cl);--on-accent:var(--ocl)}
+@media (prefers-color-scheme:dark){:root[data-accent=custom]:not([data-theme="light"]){--accent:var(--cd);--on-accent:var(--ocd)}}
+:root[data-accent=custom][data-theme="dark"]{--accent:var(--cd);--on-accent:var(--ocd)}
+.swc{background:conic-gradient(#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00)}
+.wheelbox{margin:6px 0 4px}
+.wheelwrap{position:relative;width:min(240px,70vw);aspect-ratio:1;margin:8px 0;touch-action:none;cursor:crosshair;border-radius:50%}
+.wheelwrap:focus-visible{outline:3px solid var(--accent);outline-offset:4px}
+.wheel{position:absolute;inset:0;border-radius:50%;box-shadow:0 0 0 1px var(--line);background:radial-gradient(circle closest-side,#fff,rgba(255,255,255,0)),conic-gradient(#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00)}
+.wdot{position:absolute;width:26px;height:26px;margin:-13px 0 0 -13px;border-radius:50%;border:3px solid #fff;box-shadow:0 0 0 1.5px rgba(0,0,0,.55),0 2px 6px rgba(0,0,0,.4);pointer-events:none}
+.wctl{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:4px 0}
+.wctl input[type=range]{flex:1 1 140px;min-height:44px;accent-color:var(--accent)}
+.wctl input[type=text]{width:120px;min-height:44px;text-transform:uppercase}
+.chips{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.pairbox{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin:6px 0}
+.pairbox p{margin:4px 0}
+.pairs{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 2px}
+.pairs .btn{min-height:44px;padding:6px 14px}
+.grp.ss{border-left:6px solid var(--accent);padding-left:10px}
+.ssm{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px}
+.ssn{font:700 18px/1.15 "Barlow Condensed","Arial Narrow",sans-serif;overflow-wrap:anywhere}
+.ssr{display:flex;align-items:center;justify-content:space-between;margin-top:10px;color:var(--muted);font-weight:700;font-size:14px;text-transform:uppercase;letter-spacing:.05em}
+.ssrow{display:grid;grid-template-columns:minmax(70px,32%) 1fr 1fr;gap:8px;align-items:center;margin-bottom:8px}
+.ssrow .btn{grid-column:2 / span 2;min-height:44px}
+
 /* Welcome splash */
 .splash{position:fixed;inset:0;z-index:100;display:flex;overflow-x:hidden;overflow-y:auto;color:#fff;
   background:linear-gradient(120deg,var(--g1,#2B4BD8),var(--g2,#6C3BE0),var(--g3,#12B5CB),var(--g4,#3B82F6),var(--g1,#2B4BD8));
@@ -241,6 +265,7 @@ details[open] summary::after{content:"−"}
   <div class="tabs" role="tablist">
     <button class="tab" role="tab" id="t-today" aria-selected="true" type="button">Today</button>
     <button class="tab" role="tab" id="t-hist" aria-selected="false" type="button">History</button>
+    <button class="tab" role="tab" id="t-set" aria-selected="false" type="button">Settings</button>
   </div>
 
   <section id="v-today">
@@ -263,7 +288,7 @@ details[open] summary::after{content:"−"}
     <div id="today"></div>
   </section>
 
-  <section id="v-hist" hidden>
+  <section id="v-set" hidden>
     <details class="cfg" id="health">
       <summary><div class="main"><strong>Data and backup</strong><small id="hstat"></small></div></summary>
       <div class="ex">
@@ -286,7 +311,7 @@ details[open] summary::after{content:"−"}
         <label for="pname">Your name (shows in the greeting)</label>
         <input type="text" id="pname" maxlength="30" autocomplete="given-name" placeholder="Optional">
         <span class="sub" style="display:block;margin-top:12px">Color</span>
-        <div class="sw" id="psw" role="group" aria-label="Accent color"></div>
+        <div id="psw"></div>
       </div>
     </details>
     <details class="cfg" id="priv">
@@ -316,6 +341,9 @@ details[open] summary::after{content:"−"}
       </div>
     </details>
     <div class="exp"><button class="btn" id="exp" type="button">Export spreadsheet (CSV)</button><p class="sub" id="expmsg"></p></div>
+  </section>
+
+  <section id="v-hist" hidden>
     <p class="sub" id="histmsg" aria-live="polite"></p>
     <div id="hist"></div>
   </section>

@@ -1,10 +1,17 @@
 # Lift Log changelog
 
-Current version: **1.8**. History > Data and backup shows the version your phone is running.
+Current version: **1.8.1**. History > Data and backup shows the version your phone is running.
 If it doesn't match, close the app fully and open it again while online.
 
 How numbers work: 1.x = new features or fixes. The "Files" line says what to upload to GitHub.
 "Script" says whether the Google Apps Script needs re-pasting (keep your own TOKEN) and a new deployment version.
+
+## 1.8.1 (Nov 18, 2026): Settings tab, color wheel, supersets
+- New **Settings** tab. Personalize, Privacy and security, Google Sheets sync, Data and backup and the CSV export moved there. History now shows only your past workouts. (Older entries below that say "History" for these panels mean Settings now.)
+- **Color wheel:** tap the rainbow circle in Personalize (or on the welcome screen) to pick any color by dragging on a wheel, with a brightness slider and a hex box. Arrow keys work too. Colors are automatically darkened or lightened when needed so text stays readable in light and dark mode. The welcome screen and share card use your color.
+- **Supersets:** tap **Superset** on an exercise and pick its partner. They become one block that shows sets in rounds (round 1 of each exercise, then round 2), with one **+** to add a round for all of them. A third exercise can join, **Unlink** splits them, and the Bodyweight toggle works for each exercise inside. A superset lasts for the day it was made. History marks superset exercises, and backups keep the link. (Google Sheets still gets one row per set, with no superset marker.)
+- Files: app.js, index.html, sw.js, view.html, SETUP.md, CHANGELOG.md (sw.js changed, so you will see the "App updated" banner)
+- Script: no change
 
 ## 1.8 (Nov 18, 2026): Welcome screen
 - A full-screen welcome appears every time the app opens, for new and returning users alike. Flowing animated colors (they follow your accent color), a floating barbell and a shimmering title.
